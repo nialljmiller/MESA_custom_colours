@@ -228,13 +228,27 @@ def plot_magnitudes(all_filter_results, output_file):
     print(f"Plot saved to {plot_file}")
     plt.show()
 
-
+def load_and_resolve_paths(filepath):
+    with open(filepath, 'r') as file:
+        paths = {
+            key.strip(): value.strip()
+            for line in file if line.strip() and not line.startswith('#')
+            for key, value in [line.strip().split('=', 1)]
+        }
+    base_dir = os.path.expanduser(paths['base_dir'])
+    return {key: os.path.join(base_dir, value) if key != 'base_dir' else base_dir
+            for key, value in paths.items()}
+            
 def main():
-    base_dir = '~/mesa/star/test_suite/custom_colors/'
-    history_file = base_dir + 'LOGS/history.data'
-    stellar_model = base_dir + 'data/stellar_models/Kurucz/'
-    instrument = base_dir + 'data/filters/JWST/NIRCam/'
-    vega_sed_file = base_dir + 'data/stellar_models/vega_sed.txt'
+    resolved_paths = load_and_resolve_paths('dir_inlist.txt')
+    
+    # Extract variables from resolved_paths
+    base_dir = resolved_paths['base_dir']
+    history_file = resolved_paths['history_file']
+    stellar_model = resolved_paths['stellar_model']
+    instrument = resolved_paths['instrument']
+    vega_sed_file = resolved_paths['vega_sed_file']
+    
     vega_sed = pd.read_csv(vega_sed_file, sep=',', names=['wavelength', 'flux'], comment='#')#https://www.stsci.edu/hst/instrumentation/reference-data-for-calibration-and-tools/astronomical-catalogs/castelli-and-kurucz-atlas
     print(f"Starting main process...")
     lookup_table_file = os.path.join(stellar_model, 'lookup_table.csv')

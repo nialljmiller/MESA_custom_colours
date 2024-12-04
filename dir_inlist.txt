@@ -1,0 +1,6 @@
+base_dir=~/mesa/star/test_suite/custom_colors/
+history_file=LOGS/history.data
+stellar_model=data/stellar_models/Kurucz/
+instrument=data/filters/JWST/NIRCam/
+vega_sed_file=data/stellar_models/vega_sed.txt
+
