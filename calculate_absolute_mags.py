@@ -263,10 +263,10 @@ def main():
 
     for idx, row in history.iterrows():
         print(f"Processing model {idx + 1}/{len(history)}")
-        teff = 3500#row.get('Teff')
-        log_g = 3#row.get('log_g')
+        teff = row.get('Teff')
+        log_g = row.get('log_g')
         log_R = row.get('log_R')        
-        metallicity = -0.5#row.get('initial_feh', 0.0)
+        metallicity = row.get('initial_feh', 0.0)
 
         wavelength, flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
         bol_mag = calculate_bolometric_magnitude(wavelength, flux)
