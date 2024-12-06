@@ -2,5 +2,11 @@ base_dir=~/mesa/star/test_suite/custom_colors/
 history_file=LOGS/history.data
 stellar_model=data/stellar_models/Kurucz/
 instrument=data/filters/JWST/NIRCam/
-vega_sed_file=data/stellar_models/vega_sed.txt
+
+#https://www.stsci.edu/hst/instrumentation/reference-data-for-calibration-and-tools/astronomical-catalogs/castelli-and-kurucz-atlas
+#vega_sed_file=data/stellar_models/vega_sed.txt 
+
+
+#https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/
+vega_sed_file=data/stellar_models/alpha_lyr.txt 
 

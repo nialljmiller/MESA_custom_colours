@@ -59,8 +59,7 @@ def read_mesa_history(filename):
             names=headers,
             comment='#',
             engine='python',
-            nrows=1  # Load only N lines
-        )            
+            )#nrows=1)            
     except Exception as e:
         print(f"Error parsing history file: {e}")
         sys.exit(1)
@@ -238,7 +237,8 @@ def load_and_resolve_paths(filepath):
     base_dir = os.path.expanduser(paths['base_dir'])
     return {key: os.path.join(base_dir, value) if key != 'base_dir' else base_dir
             for key, value in paths.items()}
-            
+
+
 def main():
     resolved_paths = load_and_resolve_paths('dir_inlist.txt')
     
@@ -293,6 +293,69 @@ def main():
 
     # Plot magnitudes against wavelengths
     plot_magnitudes(all_filter_results, output_file)
+    
+    
+    
+    
+def synth_main(input_csv='synth_input.csv'):
+    resolved_paths = load_and_resolve_paths('synth_dir_inlist.txt')
+
+    # Extract variables from resolved_paths
+    base_dir = resolved_paths['base_dir']
+    stellar_model = resolved_paths['stellar_model']
+    instrument = resolved_paths['instrument']
+    vega_sed_file = resolved_paths['vega_sed_file']
+
+    # Load Vega SED file
+    vega_sed = pd.read_csv(vega_sed_file, sep=',', names=['wavelength', 'flux'], comment='#')
+    print(f"Starting synthetic process...")
+
+    # Load lookup table
+    lookup_table_file = os.path.join(stellar_model, 'lookup_table.csv')
+    lookup_table = pd.read_csv(lookup_table_file)
+    print(f"Lookup table loaded: {lookup_table_file}")
+
+    # Read synthetic input CSV
+    synth_data = pd.read_csv(input_csv)
+    print(f"Synthetic input data loaded: {input_csv}")
+
+    bolometric_magnitudes = []
+    all_filter_results = []
+
+    print(f"Processing {len(synth_data)} models from synthetic input data...")
+
+    for idx, row in synth_data.iterrows():
+        print(f"Processing synthetic model {idx + 1}/{len(synth_data)}")
+        teff = row.get('teff')
+        log_g = row.get('logg')
+        metallicity = row.get('metallicity', 0.0)  # Default metallicity if not provided
+
+        # Interpolate SED
+        wavelength, flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
+
+        # Calculate bolometric magnitude
+        bol_mag = calculate_bolometric_magnitude(wavelength, flux)
+        bolometric_magnitudes.append(bol_mag)
+
+        # Convolve with filters
+        filter_results = convolve_with_filter(wavelength, flux, instrument, vega_sed)
+        all_filter_results.append(filter_results)
+
+    # Add bolometric magnitudes to synthetic data
+    synth_data['bolometric_magnitude'] = bolometric_magnitudes
+
+    # Add filter magnitudes as separate columns in the DataFrame
+    for idx, filter_results in enumerate(all_filter_results):
+        for mag, peak_wavelength in filter_results:
+            filter_name = f"mag_{int(peak_wavelength)}"
+            if filter_name not in synth_data:
+                synth_data[filter_name] = np.nan
+            synth_data.at[idx, filter_name] = mag
+
+    # Save results
+    output_file = base_dir + 'synth_output_with_magnitudes.csv'
+    synth_data.to_csv(output_file, index
+    
     
     
 if __name__ == '__main__':
