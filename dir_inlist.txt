@@ -1,4 +1,4 @@
-base_dir=~/mesa/star/test_suite/custom_colors/
+base_dir=/home/njm/mesa/star/test_suite/custom_colors/
 history_file=LOGS/history.data
 stellar_model=data/stellar_models/Kurucz2003all/
 instrument=data/filters/Liverpool/IOO/
