@@ -110,6 +110,7 @@ def download_spectrum(session, spectra_url, params, output_fp):
     """
     try:
         response = session.get(spectra_url, params=params, stream=True)
+        #print(response.content, len(response.content))
         if response.status_code == 200 and len(response.content) > 1024:  # Ensure valid content
             with open(output_fp, "wb") as file:
                 file.write(response.content)
@@ -124,7 +125,7 @@ def main():
     model_index_url = "http://svo2.cab.inta-csic.es/theory/newov2/index.php"
     spectra_base_url = "http://svo2.cab.inta-csic.es/theory/newov2/ssap.php"
 
-    base_dir = "~/mesa/star/test_suite/custom_colors/data/stellar_models/"
+    base_dir = "/home/njm/mesa/star/test_suite/custom_colors/data/stellar_models/"
     os.makedirs(base_dir, exist_ok=True)
 
     # Fetch model names
@@ -137,7 +138,7 @@ def main():
     session = requests.Session()  # Reuse session for efficiency
 
     for model in models:
-        fid = 1
+        fid = 0
         output_dir = os.path.join(base_dir, model)
         os.makedirs(output_dir, exist_ok=True)
         print(f"Processing model: {model}")
@@ -146,35 +147,60 @@ def main():
         all_keys = set()
         metadata_rows = []
         
+        search_flag = 0
+        failures = 0
         while True:
             filename = f"{model}_fid{fid}.txt"
             output_fp = os.path.join(output_dir, filename)
+            max_failures = 10
+            speed_failures = 42
+            if search_flag < 5:
+                consecutive_failures = 0
 
             if os.path.exists(output_fp):
                 print(f"File already exists: {output_fp}")
                 metadata = parse_metadata(output_fp)
                 metadata["file_name"] = filename
-                metadata = clean_metadata_values(metadata)  # Clean metadata values
+                metadata = clean_metadata_values(metadata)
                 metadata_rows.append(metadata)
                 all_keys.update(metadata.keys())
                 fid += 1
+                search_flag += 1
                 continue
 
-            # Query and download spectrum
+            # Attempt to download the spectrum
             params = {"model": model, "fid": fid, "format": "ascii"}
             if download_spectrum(session, spectra_base_url, params, output_fp):
                 print(f"Downloaded: {filename}")
                 metadata = parse_metadata(output_fp)
                 metadata["file_name"] = filename
-                metadata = clean_metadata_values(metadata)  # Clean metadata values
+                metadata = clean_metadata_values(metadata)
                 metadata_rows.append(metadata)
                 all_keys.update(metadata.keys())
-                fid += 1
+                if failures >= speed_failures:
+                    fid -= 100
+                else:
+                    fid += 1
+                consecutive_failures = 0  # Reset failures on success
+                failures = 0
+                search_flag += 1
+                
             else:
-                print(f"No more spectra for model {model}. Last fid: {fid - 1}")
-                break
+                print(f"No spectrum found for fid {fid}.")
+                print(f"consecutive_failures {consecutive_failures}.")
+                print(f"search_flag {search_flag}.")
+                consecutive_failures += 1
+                failures += 1
+                fid += 1  # Increment fid to try the next one
+                if failures >= speed_failures:
+                    fid += 100  # Increment fid to try the next one
+                # Stop if too many failures
+                if consecutive_failures >= max_failures:
+                    print(f"Stopping search after {max_failures} consecutive failures.")
+                    break
 
 
+        print(metadata_rows)
         # Write lookup table to CSV
         if metadata_rows:
             with open(lookup_table_path, mode='w', newline='') as csv_file:

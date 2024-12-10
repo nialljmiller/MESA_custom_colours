@@ -7,7 +7,7 @@ import re
 phot_base_url = "http://svo2.cab.inta-csic.es/theory/newov2/phot.php"
 
 # Output directory
-output_dir = "data/synthetic_photometry/"
+output_dir = "/home/njm/custom_colours/"#"data/synthetic_photometry/"
 os.makedirs(output_dir, exist_ok=True)
 
 def parse_photometry(file_content):
@@ -32,7 +32,7 @@ def parse_photometry(file_content):
             key, value = line.split('=', 1)
             key = key.strip('#').strip()
             value = value.split('(')[0].strip()  # Remove parentheses and text inside
-            metadata[key] = value
+            metadata[key] = value.split(' ')[0]
         elif not line.startswith('#') and line:  # Non-comment line with data
             # Extract photometry data
             parts = re.split(r'\s+', line)
@@ -59,6 +59,8 @@ def download_photometry_data(model, filter_name, start_id, output_csv):
     data_rows = []
     current_id = start_id
 
+    ender = 0
+
     while True:
         # Construct request URL
         params = {
@@ -70,7 +72,7 @@ def download_photometry_data(model, filter_name, start_id, output_csv):
         response = requests.get(phot_base_url, params=params)
 
         # Check if the response is valid
-        if response.status_code == 200 and len(response.content) > 1024:
+        if response.status_code == 200 and len(response.content) > 400 and current_id < start_id + 1000:
             # Parse the response content
             content = response.content.decode("utf-8")
             parsed_data = parse_photometry(content)
@@ -79,7 +81,9 @@ def download_photometry_data(model, filter_name, start_id, output_csv):
             current_id += 1
         else:
             print(f"No more data available for model={model}, filter={filter_name}. Last ID: {current_id - 1}")
-            break
+            ender += 1
+            if ender > 10:
+                break
 
     # Write all data to CSV
     if data_rows:
@@ -93,10 +97,12 @@ def download_photometry_data(model, filter_name, start_id, output_csv):
         print("No data to write.")
 
 # Example usage
-model = "Kurucz2003all"
-filter_name = "JWST/NIRCam.F480M"
-start_id = 16375
-output_csv = os.path.join(output_dir, f"{model}_{filter_name}_photometry.csv")
+model = "hres"
+filter_name = "Palomar/ZTF.g"
+out_filter_name =  filter_name.replace("/", ".")
+start_id = 1651
+
+output_csv = os.path.join(output_dir, f"{model}_{out_filter_name}_photometry.csv")
 
 download_photometry_data(model, filter_name, start_id, output_csv)
 

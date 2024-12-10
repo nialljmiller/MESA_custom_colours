@@ -4,6 +4,7 @@ from scipy.interpolate import interp1d
 import os
 import sys
 import matplotlib.pyplot as plt
+import argparse
 
 # Physical constants (cgs units)
 h = 6.62607015e-27   # Planck constant (erg·s)
@@ -165,10 +166,11 @@ def convolve_with_filter(wavelength, flux, filter_dir, vega_sed):
             # Calculate f_lambda at the peak wavelength
             f_lambda = f_nu * c / (peak_wavelength * 1e-8)**2  # Convert peak_wavelength to cm
             warning = None
-
-        results.append((m_AB, peak_wavelength))
+        
+        filter_name = filter_file.split('.')[0]
+        results.append((m_AB, f_nu, f_lambda, lambda_eff, peak_wavelength, filter_name))
         summary.append({
-            "Filter": filter_file,
+            "Filter": filter_name,
             "λ_eff": lambda_eff,
             "Peak Wavelength": peak_wavelength,
             "Magnitude (m_AB)": m_AB,
@@ -277,14 +279,32 @@ def main():
 
     # Add bolometric magnitudes to history
     history['bolometric_magnitude'] = bolometric_magnitudes
-
-    # Add filter magnitudes as separate columns in the DataFrame
+    # Add filter results as separate columns in the DataFrame
     for idx, filter_results in enumerate(all_filter_results):
-        for mag, peak_wavelength in filter_results:
-            filter_name = f"mag_{int(peak_wavelength)}"
-            if filter_name not in history:
-                history[filter_name] = np.nan
-            history.at[idx, filter_name] = mag
+        for mag, flux_nu, flux_lambda, lambda_eff, peak_wavelength, filter_name in filter_results:
+            # Column for magnitude
+            mag_col_name = f"mag_{filter_name}"
+            if mag_col_name not in history:
+                history[mag_col_name] = np.nan
+            history.at[idx, mag_col_name] = mag
+
+            # Column for flux_nu
+            flux_nu_col_name = f"flux_nu_{filter_name}"
+            if flux_nu_col_name not in history:
+                history[flux_nu_col_name] = np.nan
+            history.at[idx, flux_nu_col_name] = flux_nu
+
+            # Column for flux_lambda
+            flux_lambda_col_name = f"flux_lambda_{filter_name}"
+            if flux_lambda_col_name not in history:
+                history[flux_lambda_col_name] = np.nan
+            history.at[idx, flux_lambda_col_name] = flux_lambda
+
+            # Column for lambda_eff
+            lambda_eff_col_name = f"lambda_eff_{filter_name}"
+            if lambda_eff_col_name not in history:
+                history[lambda_eff_col_name] = np.nan
+            history.at[idx, lambda_eff_col_name] = lambda_eff
 
     # Save results
     output_file = base_dir + 'LOGS/history_with_magnitudes.csv'
@@ -296,15 +316,16 @@ def main():
     
     
     
-    
 def synth_main(input_csv='synth_input.csv'):
-    resolved_paths = load_and_resolve_paths('synth_dir_inlist.txt')
+    resolved_paths = load_and_resolve_paths('dir_inlist.txt')
 
     # Extract variables from resolved_paths
     base_dir = resolved_paths['base_dir']
     stellar_model = resolved_paths['stellar_model']
     instrument = resolved_paths['instrument']
     vega_sed_file = resolved_paths['vega_sed_file']
+    output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
+    plot_synth(output_file)
 
     # Load Vega SED file
     vega_sed = pd.read_csv(vega_sed_file, sep=',', names=['wavelength', 'flux'], comment='#')
@@ -326,37 +347,153 @@ def synth_main(input_csv='synth_input.csv'):
 
     for idx, row in synth_data.iterrows():
         print(f"Processing synthetic model {idx + 1}/{len(synth_data)}")
+
+        # Extract necessary parameters
         teff = row.get('teff')
         log_g = row.get('logg')
-        metallicity = row.get('metallicity', 0.0)  # Default metallicity if not provided
+        metallicity = row.get('meta', 0.0)  # Default metallicity if not provided
+        wavelength = row.get('wavelength')
+        flux = row.get('flux')
 
-        # Interpolate SED
-        wavelength, flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
+        if pd.isnull(teff) or pd.isnull(log_g) or pd.isnull(metallicity):
+            print(f"Skipping model {idx + 1} due to missing parameters.")
+            bolometric_magnitudes.append(None)
+            all_filter_results.append(None)
+            continue
+
+        # Interpolate SED using teff, log_g, and lookup table
+        model_wavelength, model_flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
 
         # Calculate bolometric magnitude
-        bol_mag = calculate_bolometric_magnitude(wavelength, flux)
+        bol_mag = calculate_bolometric_magnitude(model_wavelength, model_flux)
         bolometric_magnitudes.append(bol_mag)
 
-        # Convolve with filters
-        filter_results = convolve_with_filter(wavelength, flux, instrument, vega_sed)
+        # Convolve model SED with filters
+        filter_results = convolve_with_filter(model_wavelength, model_flux, instrument, vega_sed)
         all_filter_results.append(filter_results)
+
+        # Print some info about the model
+        print(f"Bolometric magnitude: {bol_mag}")
+        print(f"Filter results (mags): {[mag for mag, _, _, _, _, _ in filter_results]}")
 
     # Add bolometric magnitudes to synthetic data
     synth_data['bolometric_magnitude'] = bolometric_magnitudes
 
-    # Add filter magnitudes as separate columns in the DataFrame
+    # Add filter results as separate columns in the DataFrame
     for idx, filter_results in enumerate(all_filter_results):
-        for mag, peak_wavelength in filter_results:
-            filter_name = f"mag_{int(peak_wavelength)}"
-            if filter_name not in synth_data:
-                synth_data[filter_name] = np.nan
-            synth_data.at[idx, filter_name] = mag
+        if filter_results is None:
+            continue
+        for mag, flux_nu, flux_lambda, lambda_eff, peak_wavelength, filter_name in filter_results:
+            # Column for magnitude
+            mag_col_name = f"mag_{filter_name}"
+            if mag_col_name not in synth_data:
+                synth_data[mag_col_name] = np.nan
+            synth_data.at[idx, mag_col_name] = mag
+
+            # Column for flux_nu
+            flux_nu_col_name = f"flux_nu_{filter_name}"
+            if flux_nu_col_name not in synth_data:
+                synth_data[flux_nu_col_name] = np.nan
+            synth_data.at[idx, flux_nu_col_name] = flux_nu
+
+            # Column for flux_lambda
+            flux_lambda_col_name = f"flux_lambda_{filter_name}"
+            if flux_lambda_col_name not in synth_data:
+                synth_data[flux_lambda_col_name] = np.nan
+            synth_data.at[idx, flux_lambda_col_name] = flux_lambda
+
+            # Column for lambda_eff
+            lambda_eff_col_name = f"lambda_eff_{filter_name}"
+            if lambda_eff_col_name not in synth_data:
+                synth_data[lambda_eff_col_name] = np.nan
+            synth_data.at[idx, lambda_eff_col_name] = lambda_eff
 
     # Save results
-    output_file = base_dir + 'synth_output_with_magnitudes.csv'
-    synth_data.to_csv(output_file, index
+    output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
+    synth_data.to_csv(output_file, index=False)
+    print(f"Results saved to {output_file}.")
+
+    plot_synth(output_file)
     
     
+def plot_synth(output_file):
+    import pandas as pd
+    import matplotlib.pyplot as plt
+    import numpy as np
+
+    # Load the data
+    data = pd.read_csv(output_file)
+
+    # Calculate absolute and percentage differences
+    data['flux_diff'] = data['flux'] - data['flux_lambda_g']
+    data['flux_percent_diff'] = ((data['flux'] - data['flux_lambda_g']).abs() / data['flux_lambda_g']) * 100
+
+    # Create pivot tables for the heatmaps
+    pivot_table_abs = data.pivot_table(index='teff', columns='logg', values='flux_diff', aggfunc='mean')
+    pivot_table_pct = data.pivot_table(index='teff', columns='logg', values='flux_percent_diff', aggfunc='mean')
+
+    # Set up the figure and subplots
+    fig, axs = plt.subplots(1, 2, figsize=(16, 8), gridspec_kw={'width_ratios': [1, 1], 'wspace': 0})
+
+    # Absolute difference heatmap
+    im1 = axs[0].imshow(pivot_table_abs, origin='lower', aspect='auto', cmap='viridis', extent=[
+        data['logg'].min(), data['logg'].max(),
+        data['teff'].min(), data['teff'].max()
+    ])
+    
+    axs[0].grid(color='gray', linestyle='--', linewidth=0.5)
+    cbar1 = fig.colorbar(im1, ax=axs[0], location='left', pad=0.22)
+
+
+    # Percentage difference heatmap
+    im2 = axs[1].imshow(pivot_table_pct, origin='lower', aspect='auto', cmap='plasma', extent=[
+        data['logg'].min(), data['logg'].max(),
+        data['teff'].min(), data['teff'].max()
+    ])
+
+    axs[1].yaxis.tick_right()
+    axs[1].yaxis.set_label_position("right")
+    axs[1].grid(color='gray', linestyle='--', linewidth=0.5)
+    cbar2 = fig.colorbar(im2, ax=axs[1], location='right', pad=0.01)
+
+
+    cbar1.set_label(r'Absolute Flux Difference (SVO flux $-$ This flux)')
+    cbar2.set_label(r'Percentage Difference (\%)')
+
+
+    # Remove the Y-axis on the right-hand plot
+    axs[1].yaxis.set_visible(False)
+
+    # Adjust X-axis ticks and range for the left-hand plot
+    axs[0].set_xticks([0, 1, 2, 3, 4])  # Custom ticks for the X-axis
+    axs[0].set_xlim(data['logg'].min(), data['logg'].max())  # Ensure the range matches
+
+    # Increase label sizes
+    axs[0].set_ylabel(r'$\mathit{T}_{\mathrm{eff}}$ (K)', fontsize=14)
+    axs[0].set_xlabel(r'                      $\log(g)$', fontsize=14)
+
+
+    plt.show()
+
+# Example usage with a placeholder file name
+# Replace 'synth_output_with_magnitudes.csv' with the actual path to your file
+# plot_synth('synth_output_with_magnitudes.csv')
+
     
 if __name__ == '__main__':
-    main()
+    # Set up argument parser
+    parser = argparse.ArgumentParser(description="Process data for stellar magnitudes.")
+    parser.add_argument(
+        '-s', '--synth',
+        action='store_true',
+        help="Run the synthetic data processing instead of the main program."
+    )
+    args = parser.parse_args()
+
+    # Decide which function to run
+    if args.synth:
+        synth_main(input_csv='hres_Palomar.ZTF.g_photometry.csv')
+        #synth_main(input_csv='Kurucz2003all_JWSTNIRCam.F480M_photometry.csv')        
+        #synth_main(input_csv='Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv')
+    else:
+        main()
