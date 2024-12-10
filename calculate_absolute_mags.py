@@ -68,18 +68,68 @@ def read_mesa_history(filename):
     print(f"History file successfully parsed with {len(data)} entries.")
     return data
 
-def get_closest_stellar_models(teff, log_g, lookup_table):
-    print(f"Finding closest stellar models for Teff={teff}, log_g={log_g}")
-    distances = np.sqrt((lookup_table[' teff'] - teff)**2 + (lookup_table[' logg'] - log_g)**2)
-    closest_indices = np.argsort(distances)[:2]
-    if len(closest_indices) < 2:
-        raise ValueError("Not enough models for interpolation.")
-    print(f"Closest models found: {closest_indices}")
-    return lookup_table.iloc[closest_indices]
 
-def interpolate_sed(teff, log_g, stellar_model_dir, lookup_table):
+def get_closest_stellar_models(target_params, lookup_table):
+    """
+    Finds the closest stellar models based on target parameters, handling missing features in the lookup table.
+
+    Parameters:
+        target_params (dict): Dictionary of target parameters (e.g., 'teff', 'log_g', 'feh').
+        lookup_table (DataFrame): DataFrame containing the stellar models.
+
+    Returns:
+        DataFrame: Closest stellar models.
+    """
+    print("Finding closest stellar models for the following target parameters:")
+    for param, value in target_params.items():
+        print(f"  {param}: {value}")
+    
+    # Initialize distances
+    distances = 0
+    used_params = []  # Keep track of which parameters are used in the calculation
+    # Check which target parameters are present in the lookup table
+    for param, target_value in target_params.items():
+        lookup_param = ' ' + param  # Add space prefix for lookup
+        if lookup_param in lookup_table:
+            used_params.append(lookup_param)
+            param_range = lookup_table[lookup_param].max() - lookup_table[lookup_param].min()
+            if param_range == 0:  # Avoid division by zero
+                print(f"Warning: Parameter '{lookup_param}' has zero range. Skipping.")
+                continue
+            normalized_diff = (lookup_table[lookup_param] - target_value) / param_range
+            distances += normalized_diff**2
+        else:
+            print(f"Warning: Parameter '{param}' not found in the lookup table. Skipping.")
+
+    # Ensure at least one parameter was used
+    if not used_params:
+        raise ValueError("None of the target parameters are present in the lookup table.")
+        # Calculate final Euclidean distance
+    distances = np.sqrt(distances)
+
+    # Handle NA values in distances (replace with a very large number or drop them)
+    distances = distances.fillna(np.inf)  # Replace NaN with infinity to exclude from sorting
+
+    # Sort distances and get all valid indices
+    sorted_indices = np.argsort(distances.values)  # Use .values to work with numpy directly
+
+    # Get closest models in sorted order
+    sorted_models = lookup_table.iloc[sorted_indices].copy()
+    sorted_models['distance'] = distances.values[sorted_indices]  # Add distances for clarity
+
+    # Print results
+    print("\nClosest stellar models (sorted by distance):")
+    for i, row in sorted_models.iterrows():
+        model_info = ', '.join([f"{param}: {row[param]}" for param in used_params])
+        print(f"Model {i + 1}: {model_info}, Distance: {row['distance']:.4f}")
+
+    return sorted_models
+
+def interpolate_sed(target_params, stellar_model_dir, lookup_table):
+    teff = target_params['teff']
+    log_g = target_params['logg']
     print(f"Interpolating SED for Teff={teff}, log_g={log_g}")
-    closest_models = get_closest_stellar_models(teff, log_g, lookup_table)
+    closest_models = get_closest_stellar_models(target_params, lookup_table)
 
     print(f"Closest models for interpolation:\n {closest_models}")
 
@@ -216,7 +266,7 @@ def plot_magnitudes(all_filter_results, output_file):
     plt.figure(figsize=(10, 10))
 
     for model_idx, filter_results in enumerate(all_filter_results):
-        magnitudes, wavelengths = zip(*filter_results)
+        magnitudes, flux_nu, flux_lambda, lambda_eff, wavelengths, filter_name = zip(*filter_results)
         plt.scatter(wavelengths, magnitudes, label=f"Model {model_idx + 1}", alpha=0.6)
 
     plt.xlabel("Wavelength (Angstroms)")
@@ -263,14 +313,18 @@ def main():
     history = read_mesa_history(history_file)
     print(f"Processing {len(history)} models from history file...")
 
+
+
     for idx, row in history.iterrows():
         print(f"Processing model {idx + 1}/{len(history)}")
-        teff = row.get('Teff')
-        log_g = row.get('log_g')
-        log_R = row.get('log_R')        
-        metallicity = row.get('initial_feh', 0.0)
+        target_params = {
+            'teff': row.get('Teff'),
+            'logg': row.get('log_g'),
+            'feh': row.get('initial_feh', 0.0),
+            'log_R': row.get('log_R')
+        }
 
-        wavelength, flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
+        wavelength, flux = interpolate_sed(target_params, stellar_model, lookup_table)
         bol_mag = calculate_bolometric_magnitude(wavelength, flux)
         bolometric_magnitudes.append(bol_mag)
 
@@ -324,8 +378,10 @@ def synth_main(input_csv='synth_input.csv'):
     stellar_model = resolved_paths['stellar_model']
     instrument = resolved_paths['instrument']
     vega_sed_file = resolved_paths['vega_sed_file']
-    output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
-    plot_synth(output_file)
+    img_fp = input_csv.replace('.csv','')
+    output_file = img_fp.replace('.','_') + '.csv'
+    #output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
+    #plot_synth(output_file)
 
     # Load Vega SED file
     vega_sed = pd.read_csv(vega_sed_file, sep=',', names=['wavelength', 'flux'], comment='#')
@@ -361,8 +417,17 @@ def synth_main(input_csv='synth_input.csv'):
             all_filter_results.append(None)
             continue
 
+        target_params = {
+            'teff': row.get('teff'),
+            'logg': row.get('logg'),
+            'feh': row.get('meta', 0.0),
+            'log_R': row.get('log_R')
+        }
+
+        model_wavelength, model_flux = interpolate_sed(target_params, stellar_model, lookup_table)
+
         # Interpolate SED using teff, log_g, and lookup table
-        model_wavelength, model_flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
+        #model_wavelength, model_flux = interpolate_sed(teff, log_g, stellar_model, lookup_table)
 
         # Calculate bolometric magnitude
         bol_mag = calculate_bolometric_magnitude(model_wavelength, model_flux)
@@ -409,7 +474,7 @@ def synth_main(input_csv='synth_input.csv'):
             synth_data.at[idx, lambda_eff_col_name] = lambda_eff
 
     # Save results
-    output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
+
     synth_data.to_csv(output_file, index=False)
     print(f"Results saved to {output_file}.")
 
@@ -471,15 +536,12 @@ def plot_synth(output_file):
     # Increase label sizes
     axs[0].set_ylabel(r'$\mathit{T}_{\mathrm{eff}}$ (K)', fontsize=14)
     axs[0].set_xlabel(r'                      $\log(g)$', fontsize=14)
-
-
+    img_fp = output_file.replace('.csv','')
+    img_fp = img_fp.replace('.','_') + '.jpg'
+    print(img_fp)
+    plt.savefig(img_fp)
     plt.show()
 
-# Example usage with a placeholder file name
-# Replace 'synth_output_with_magnitudes.csv' with the actual path to your file
-# plot_synth('synth_output_with_magnitudes.csv')
-
-    
 if __name__ == '__main__':
     # Set up argument parser
     parser = argparse.ArgumentParser(description="Process data for stellar magnitudes.")
@@ -492,8 +554,8 @@ if __name__ == '__main__':
 
     # Decide which function to run
     if args.synth:
-        synth_main(input_csv='hres_Palomar.ZTF.g_photometry.csv')
+        #synth_main(input_csv='hres_Palomar.ZTF.g_photometry.csv')
         #synth_main(input_csv='Kurucz2003all_JWSTNIRCam.F480M_photometry.csv')        
-        #synth_main(input_csv='Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv')
+        synth_main(input_csv='Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv')
     else:
         main()

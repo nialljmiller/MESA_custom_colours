@@ -1,7 +1,12 @@
 base_dir=~/mesa/star/test_suite/custom_colors/
 history_file=LOGS/history.data
-stellar_model=data/stellar_models/hres/
-instrument=data/filters/Palomar/ZTF/
+stellar_model=data/stellar_models/Kurucz2003all/
+instrument=data/filters/Liverpool/IOO/
+input_csv=hres_Palomar.ZTF.g_photometry.csv
+#input_csv=Kurucz2003all_JWSTNIRCam.F480M_photometry.csv        
+#input_csv=Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv
+
+
 
 #https://www.stsci.edu/hst/instrumentation/reference-data-for-calibration-and-tools/astronomical-catalogs/castelli-and-kurucz-atlas
 #vega_sed_file=data/stellar_models/vega_sed.txt 
@@ -9,4 +14,7 @@ instrument=data/filters/Palomar/ZTF/
 
 #https://archive.stsci.edu/hlsps/reference-atlases/cdbs/current_calspec/
 vega_sed_file=data/stellar_models/alpha_lyr.txt 
+
+
+
 
