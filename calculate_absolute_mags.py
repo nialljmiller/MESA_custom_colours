@@ -118,10 +118,10 @@ def get_closest_stellar_models(target_params, lookup_table):
     sorted_models['distance'] = distances.values[sorted_indices]  # Add distances for clarity
 
     # Print results
-    print("\nClosest stellar models (sorted by distance):")
-    for i, row in sorted_models.iterrows():
-        model_info = ', '.join([f"{param}: {row[param]}" for param in used_params])
-        print(f"Model {i + 1}: {model_info}, Distance: {row['distance']:.4f}")
+    #print("\nClosest stellar models (sorted by distance):")
+    #for i, row in sorted_models.iterrows():
+    #    model_info = ', '.join([f"{param}: {row[param]}" for param in used_params])
+    #    print(f"Model {i + 1}: {model_info}, Distance: {row['distance']:.4f}")
 
     return sorted_models
 
@@ -380,9 +380,11 @@ def synth_main(input_csv='synth_input.csv'):
     vega_sed_file = resolved_paths['vega_sed_file']
     img_fp = input_csv.replace('.csv','')
     output_file = img_fp.replace('.','_') + '.csv'
-    #output_file = os.path.join(base_dir, 'synth_output_with_magnitudes.csv')
-    #plot_synth(output_file)
-
+    try:
+        plot_synth(output_file)
+    except:
+        pass
+        
     # Load Vega SED file
     vega_sed = pd.read_csv(vega_sed_file, sep=',', names=['wavelength', 'flux'], comment='#')
     print(f"Starting synthetic process...")
@@ -488,10 +490,11 @@ def plot_synth(output_file):
 
     # Load the data
     data = pd.read_csv(output_file)
-
+    print(output_file)
+    print(data)
     # Calculate absolute and percentage differences
-    data['flux_diff'] = data['flux'] - data['flux_lambda_g']
-    data['flux_percent_diff'] = ((data['flux'] - data['flux_lambda_g']).abs() / data['flux_lambda_g']) * 100
+    data['flux_diff'] = data['flux'] - data['flux_lambda_F480M']
+    data['flux_percent_diff'] = ((data['flux'] - data['flux_lambda_F480M']).abs() / data['flux_lambda_F480M']) * 100
 
     # Create pivot tables for the heatmaps
     pivot_table_abs = data.pivot_table(index='teff', columns='logg', values='flux_diff', aggfunc='mean')
@@ -555,7 +558,7 @@ if __name__ == '__main__':
     # Decide which function to run
     if args.synth:
         #synth_main(input_csv='hres_Palomar.ZTF.g_photometry.csv')
-        #synth_main(input_csv='Kurucz2003all_JWSTNIRCam.F480M_photometry.csv')        
-        synth_main(input_csv='Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv')
+        synth_main(input_csv='Kurucz2003all_JWSTNIRCam.F480M_photometry.csv')        
+        #synth_main(input_csv='Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv')
     else:
         main()

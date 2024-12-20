@@ -1,9 +1,9 @@
-base_dir=/home/njm/mesa/star/test_suite/custom_colors/
+base_dir=~/mesa/star/test_suite/custom_colors/
 history_file=LOGS/history.data
 stellar_model=data/stellar_models/Kurucz2003all/
-instrument=data/filters/Liverpool/IOO/
-input_csv=hres_Palomar.ZTF.g_photometry.csv
-#input_csv=Kurucz2003all_JWSTNIRCam.F480M_photometry.csv        
+instrument=data/filters/JWST/NIRCam/
+#input_csv=hres_Palomar.ZTF.g_photometry.csv
+input_csv=Kurucz2003all_JWSTNIRCam.F480M_photometry.csv        
 #input_csv=Kurucz2003all_Liverpool.IOO.SDSS-r_photometry.csv
 
 

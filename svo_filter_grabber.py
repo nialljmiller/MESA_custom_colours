@@ -7,22 +7,25 @@ import pandas as pd
 # Set a longer timeout
 SvoFps.TIMEOUT = 300  # Increase timeout to 5 minutes
 
-def fetch_filter_links(filters_df):
+def fetch_facility_links(filters_df):
     """
-    Allow the user to select specific filters from the list.
+    Allow the user to select specific facilities from the list.
     """
-    # Display filters for user selection
-    print("\nAvailable filters:")
-    for idx, row in filters_df.iterrows():
-        print(f"{idx + 1}. {row['filterID']} - {row['Facility']} - {row['Instrument']} - {row['Band']}")
+    # Get unique facilities
+    facilities = filters_df['Facility'].unique()
 
-    # Ask the user to select filters
-    user_input = input("Enter the numbers of the filters you want to select, separated by commas: ")
+    # Display facilities for user selection
+    print("\nAvailable facilities:")
+    for idx, facility in enumerate(facilities, start=1):
+        print(f"{idx}. {facility}")
+
+    # Ask the user to select facilities
+    user_input = input("Enter the numbers of the facilities you want to select, separated by commas: ")
 
     try:
         selected_indices = [int(num.strip()) - 1 for num in user_input.split(",")]
-        selected_filters = filters_df.iloc[selected_indices]
-        return selected_filters
+        selected_facilities = [facilities[i] for i in selected_indices if 0 <= i < len(facilities)]
+        return filters_df[filters_df['Facility'].isin(selected_facilities)]
     except (ValueError, IndexError):
         print("Invalid input. Please enter valid numbers separated by commas.")
         return pd.DataFrame()
@@ -69,8 +72,8 @@ def main():
     # Print total number of filters
     print(f"\nTotal number of filters to process: {len(filters_df)}")
 
-    # Fetch user-selected filters
-    selected_filters_df = fetch_filter_links(filters_df)
+    # Fetch user-selected filters by facility
+    selected_filters_df = fetch_facility_links(filters_df)
     if selected_filters_df.empty:
         print("No filters selected. Exiting.")
         return

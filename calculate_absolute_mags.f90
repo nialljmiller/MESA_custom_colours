@@ -65,77 +65,74 @@ contains
   end subroutine get_closest_stellar_models
 
 
+subroutine read_lookup_table(filepath, teff_array, logg_array, file_names)
+  implicit none
+  character(len=*), intent(in) :: filepath                ! Path to the lookup table file
+  real(8), allocatable, intent(out) :: teff_array(:), logg_array(:)  ! Arrays for Teff and Log(g)
+  character(len=256), allocatable, intent(out) :: file_names(:)      ! Array for file names
+  integer :: unit, iostat, i, n_models
+  character(len=256) :: line, file_name
+  real(8) :: teff, logg
+  integer :: count
 
-  subroutine read_lookup_table(filepath, teff_array, logg_array, file_names, n_models)
-    implicit none
-    character(len=*), intent(in) :: filepath                ! Path to the lookup table file
-    real(8), allocatable, intent(out) :: teff_array(:), logg_array(:)  ! Arrays for Teff and Log(g)
-    character(len=256), allocatable, intent(out) :: file_names(:)      ! Array for file names
-    integer, intent(out) :: n_models                       ! Number of models in the lookup table
-    integer :: unit, iostat, i
-    character(len=256) :: line, file_name
-    real(8) :: teff, logg
-    integer :: count
+  ! Open the file
+  open(newunit=unit, file=filepath, status='old', action='read', iostat=iostat)
+  if (iostat /= 0) then
+    print *, "Error: Unable to open file: ", trim(filepath)
+    stop
+  end if
 
-    ! Open the file
-    open(newunit=unit, file=filepath, status='old', action='read', iostat=iostat)
+  ! Count the number of lines (excluding the header)
+  count = 0
+  do
+    read(unit, '(A)', iostat=iostat) line
+    if (iostat /= 0) exit
+    if (line(1:1) /= '#') count = count + 1
+  end do
+
+  n_models = count
+
+  ! Allocate arrays
+  allocate(teff_array(n_models), logg_array(n_models), file_names(n_models))
+
+  ! Rewind to start reading the data
+  rewind(unit)
+  do
+    read(unit, '(A)', iostat=iostat) line
+    if (iostat /= 0) exit
+    if (line(1:1) /= '#') exit  ! Skip the header line
+  end do
+
+  ! Read the data into arrays
+  i = 1
+  do
+    read(unit, '(A)', iostat=iostat) line
+    if (iostat /= 0) exit
+    if (trim(line) == '') cycle  ! Skip empty lines
+
+    ! Parse the line (assumes CSV format: file_name, atmosphere, feh, logg, teff)
+    read(line, '(A, 4X, F8.3, 1X, F8.3)', iostat=iostat) file_name, logg, teff
     if (iostat /= 0) then
-      print *, "Error: Unable to open file: ", trim(filepath)
+      print *, "Error: Malformed line in file: ", trim(line)
       stop
     end if
 
-    ! Count the number of lines (excluding the header)
-    count = 0
-    do
-      read(unit, '(A)', iostat=iostat) line
-      if (iostat /= 0) exit
-      if (line(1:1) /= '#') count = count + 1
-    end do
+    file_names(i) = trim(file_name)
+    teff_array(i) = teff
+    logg_array(i) = logg
+    i = i + 1
+  end do
 
-    n_models = count
+  ! Close the file
+  close(unit)
 
-    ! Allocate arrays
-    allocate(teff_array(n_models), logg_array(n_models), file_names(n_models))
-
-    ! Rewind to start reading the data
-    rewind(unit)
-    do
-      read(unit, '(A)', iostat=iostat) line
-      if (iostat /= 0) exit
-      if (line(1:1) /= '#') exit  ! Skip the header line
-    end do
-
-    ! Read the data into arrays
-    i = 1
-    do
-      read(unit, '(A)', iostat=iostat) line
-      if (iostat /= 0) exit
-      if (trim(line) == '') cycle  ! Skip empty lines
-
-      ! Parse the line (assumes CSV format: file_name, atmosphere, feh, logg, teff)
-      read(line, '(A, 4X, F8.3, 1X, F8.3)', iostat=iostat) file_name, logg, teff
-      if (iostat /= 0) then
-        print *, "Error: Malformed line in file: ", trim(line)
-        stop
-      end if
-
-      file_names(i) = trim(file_name)
-      teff_array(i) = teff
-      logg_array(i) = logg
-      i = i + 1
-    end do
-
-    ! Close the file
-    close(unit)
-
-    print *, "Lookup table loaded successfully with ", n_models, " entries."
-  end subroutine read_lookup_table
+  print *, "Lookup table loaded successfully with ", n_models, " entries."
+end subroutine read_lookup_table
 
 
 
 end module utilities
 ! Main program
-
 
 program stellar_analysis
   use utilities
@@ -144,8 +141,9 @@ program stellar_analysis
   ! Variables
   character(len=256) :: filename
   character(len=256) :: base_dir, history_file, stellar_model, instrument, vega_sed_file, lookup_table_file
-  integer :: iostat, n_models
+  integer :: iostat
   real(8), allocatable :: teff_array(:), logg_array(:)
+  character(len=256), allocatable :: file_names(:)
   real(8) :: teff_target, logg_target
   integer, allocatable :: closest_indices(:)
 
@@ -157,14 +155,23 @@ program stellar_analysis
   ! Load paths from 'dir_inlist.txt'
   call load_and_resolve_paths('dir_inlist.txt', base_dir, history_file, stellar_model, instrument, vega_sed_file)
 
+  print *, "base_dir:", base_dir
+  print *, "history_file:", history_file
+  print *, "stellar_model:", stellar_model
+  print *, "instrument:", instrument
+  print *, "vega_sed_file:", vega_sed_file
+
   ! Construct the lookup table file path
-  lookup_table_file = trim(stellar_model) // "/lookup_table.csv"
+  lookup_table_file = trim(base_dir) // trim(stellar_model) // "lookup_table.csv"
 
   ! Read the lookup table
-  call read_lookup_table(lookup_table_file, teff_array, logg_array, n_models)
+  call read_lookup_table(lookup_table_file, teff_array, logg_array, file_names)
 
   ! Debugging output to confirm lookup table is loaded
-  print *, "Lookup table loaded successfully with ", n_models, " entries."
+  print *, "Lookup table loaded successfully."
+  print *, "File names:", file_names
+  print *, "Teff values:", teff_array
+  print *, "Log(g) values:", logg_array
 
   ! Example target parameters (replace these with real data later)
   teff_target = 5800.0d0
@@ -174,104 +181,19 @@ program stellar_analysis
   allocate(closest_indices(2))
 
   ! Find the closest stellar models
-  call get_closest_stellar_models(teff_target, logg_target, teff_array, logg_array, n_models, closest_indices)
+  call get_closest_stellar_models(teff_target, logg_target, teff_array, logg_array, size(teff_array), closest_indices)
 
   ! Debugging output for closest indices
+  print *, "Target data --- Teff=", teff_target, ", Log(g)=", logg_target
   print *, "Closest stellar models indices: ", closest_indices
   print *, "Closest model parameters:"
   print *, "Model 1: Teff=", teff_array(closest_indices(1)), ", Log(g)=", logg_array(closest_indices(1))
   print *, "Model 2: Teff=", teff_array(closest_indices(2)), ", Log(g)=", logg_array(closest_indices(2))
 
   ! Cleanup
-  deallocate(teff_array, logg_array, closest_indices)
+  deallocate(teff_array, logg_array, file_names, closest_indices)
 
 end program stellar_analysis
-
-
-subroutine read_mesa_history(filename)
-  use utilities
-  implicit none
-  character(len=*), intent(in) :: filename
-  integer :: iostat, unit, header_line_idx, n_rows, n_cols, i, j
-  character(len=256) :: line
-  character(len=32), allocatable :: headers(:)
-  real(8), allocatable :: data(:,:)
-
-  open(newunit=unit, file=filename, status='old', action='read', iostat=iostat)
-  if (iostat /= 0) then
-    print *, "Error: Cannot open file ", trim(filename)
-    stop
-  end if
-
-  ! Locate the header line
-  header_line_idx = -1
-  i = 0
-  do
-    read(unit, '(A)', iostat=iostat) line
-    if (iostat /= 0) exit
-    i = i + 1
-    if (index(trim(line), 'model_number') > 0) then
-      header_line_idx = i
-      exit
-    end if
-  end do
-
-  if (header_line_idx == -1) then
-    print *, "Error: Header line not found in file."
-    close(unit)
-    stop
-  end if
-
-  ! Rewind and read header line
-  rewind(unit)
-  do i = 1, header_line_idx
-    read(unit, '(A)', iostat=iostat) line
-  end do
-
-  ! Parse header line into column names
-  n_cols = 0
-  do i = 1, len_trim(line)
-    if (line(i:i) /= ' ') then
-      if (i == 1 .or. line(i-1:i-1) == ' ') n_cols = n_cols + 1
-    end if
-  end do
-  allocate(headers(n_cols))
-  read(line, *) (headers(i), i = 1, n_cols)
-
-  print *, "Columns found: ", n_cols
-  do i = 1, n_cols
-    print *, "Column ", i, ": ", trim(headers(i))
-  end do
-
-  ! Allocate data array
-  rewind(unit)
-  n_rows = 0
-  do
-    read(unit, '(A)', iostat=iostat)
-    if (iostat /= 0) exit
-    n_rows = n_rows + 1
-  end do
-  n_rows = n_rows - header_line_idx  ! Subtract header and metadata rows
-
-  allocate(data(n_rows, n_cols))
-
-  ! Read data into array
-  rewind(unit)
-  do i = 1, header_line_idx
-    read(unit, '(A)', iostat=iostat)  ! Skip to data section
-  end do
-
-  do i = 1, n_rows
-    read(unit, *, iostat=iostat) (data(i, j), j = 1, n_cols)
-    if (iostat /= 0) exit
-  end do
-
-  print *, "Data successfully read into array with dimensions: ", n_rows, "x", n_cols
-
-  close(unit)
-end subroutine read_mesa_history
-
-
 
 
 
