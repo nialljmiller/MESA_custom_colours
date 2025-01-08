@@ -154,6 +154,7 @@ module run_star_extras
      ierr = 0
      CALL star_ptr(id, s, ierr)
      IF (ierr /= 0) RETURN
+
   END SUBROUTINE data_for_extra_profile_columns
 
 
@@ -308,46 +309,56 @@ module run_star_extras
       integer :: i
       character(len=100), allocatable :: array_of_strings(:)
       integer :: num_strings
-      REAL :: teff, log_g, metallicity
-      CHARACTER(LEN=256) :: filepath
+      REAL(dp) :: teff, log_g, metallicity
+      CHARACTER(LEN=256) :: sed_filepath, filter_filepath, filter_name, filter_dir
       REAL :: bolometric_magnitude, bolometric_flux
+      REAL(DP), DIMENSION(:), ALLOCATABLE :: wavelengths, fluxes, filter_wavelengths, filter_trans
       ierr = 0
       call star_ptr(id, s, ierr)
       if (ierr /= 0) return
 
       ! Input parameters
       teff = s%T(1)
-      log_g = s%grav(1)
+      log_g = LOG10(s%grav(1))
       metallicity = s%job%extras_rpar(1)
-      filepath = s%x_character_ctrl(1)
+      sed_filepath = s%x_character_ctrl(1)
+      filter_dir = s%x_character_ctrl(2)      
 
 
       ! Populate array_of_strings
       if (allocated(array_of_strings)) deallocate(array_of_strings)
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
+      print *, array_of_strings, num_strings, id
+      !STOP
 
-      CALL CalculateBolometricMagnitude(teff, log_g, metallicity, filepath, bolometric_magnitude, bolometric_flux)
+      CALL CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux,wavelengths, fluxes, sed_filepath)
       names(1) = "Mag_bol"
       vals(1) = bolometric_magnitude 
 
       names(2) = "Flux_bol"
       vals(2) = bolometric_flux 
 
-      print *, s%T(1), s%grav(1), s%job%extras_rpar(1)
-
+      !print *, teff, log_g, metallicity
+      !STOP
       ! Validate and populate values
       if (allocated(array_of_strings)) then
           do i = 3, how_many_extra_history_columns(id)
               if (i <= num_strings+2) then
-                  names(i) = trim(remove_dat(array_of_strings(i-2)))
+                  filter_name = trim(remove_dat(array_of_strings(i-2)))
               else
-                  names(i) = "Unknown"
+                  filter_name = "Unknown"
               end if
-              if (s%T(1) >= 0 .and. s%grav(1) >= 0 .and. s%job%extras_rpar(1) >= 0) then
-                  vals(i) = CalculateSyntheticMagnitude(s%T(1), s%grav(1), s%job%extras_rpar(1), ierr)
+
+              names(i) = filter_name
+              
+              ! Prepend filter name with filter dir to generate filepath
+              filter_filepath = trim(filter_dir) // "/" // array_of_strings(i-2)
+              
+              if (s%T(1) >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
+                  vals(i) = CalculateSyntheticMagnitude(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
               else
-                  vals(i) = -1.0_dp ! Assign a default or invalid value
+                  vals(i) = -1.0_dp ! Assign an error avlue
                   ierr = 1          ! Indicate an error
               end if
           end do
@@ -368,39 +379,84 @@ module run_star_extras
   !###########################################################
   !## CUSTOM COLOURS
   !########################################################### 
-    
 
-  REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr)
-     IMPLICIT NONE
-     REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
-     INTEGER, INTENT(OUT) :: ierr
 
-     REAL(DP) :: bolometric_flux
+SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
+  IMPLICIT NONE
+  REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+  REAL(DP), DIMENSION(:), INTENT(IN) :: filter_wavelengths, filter_trans
+  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: convolved_flux
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
+  INTEGER :: n, i
 
-     ierr = 0
+  n = SIZE(wavelengths)
+  ALLOCATE(interpolated_filter(n))
+  ALLOCATE(convolved_flux(n))
 
-     ! Check for invalid gravity input
-     IF (gravity == 0.0_DP) THEN
+  ! Interpolate the filter to match wavelengths
+  !CALL LinearInterpolate(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
+  CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
+
+  ! Perform convolution (element-wise multiplication)
+  DO i = 1, n
+    convolved_flux(i) = fluxes(i) * interpolated_filter(i)
+  END DO
+
+END SUBROUTINE ConvolveSED
+
+
+
+
+
+REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
+    IMPLICIT NONE
+    REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
+    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath     
+    INTEGER, INTENT(OUT) :: ierr
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes, filter_wavelengths, filter_trans
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
+    REAL(DP) :: bolometric_flux
+    INTEGER :: n_wavelengths
+
+    print *, "Filter File Path: ", filter_filepath
+    ierr = 0
+
+    ! Load filter data
+    CALL LoadFilter(filter_filepath, filter_wavelengths, filter_trans)
+
+    ! Check for invalid gravity input
+    IF (gravity == 0.0_DP) THEN
         ierr = 1
         CalculateSyntheticMagnitude = 0.0_DP
         RETURN
-     END IF
+    END IF
 
-     ! Compute bolometric flux and synthetic magnitude 
-     
-     !TODO:
-     ! - WRITE THIS FUNCTION
-     ! - OPEN FILTER AND CONVOLVE WITH PREVIOUSLY COMPUTED SED
-     
-     bolometric_flux = (temperature**4) / gravity
-     CalculateSyntheticMagnitude = -2.5_DP * LOG10(bolometric_flux) - 48.6_DP
-  END FUNCTION CalculateSyntheticMagnitude
+    ! Determine size of wavelengths
+    n_wavelengths = SIZE(wavelengths)
 
+    ! Allocate the interpolated filter array
+    ALLOCATE(interpolated_filter(n_wavelengths))
 
-  SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, filepath, bolometric_magnitude, bolometric_flux)
+    ! Interpolate the filter transmission to match wavelengths
+    !CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
+    
+    CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
+
+    ! Print the arrays for verification
+    print *, "Wavelengths: ", wavelengths
+    print *, "Fluxes: ", fluxes
+    print *, "Convolved Fluxes: ", convolved_flux
+    print *, "Interpolated Filter: ", interpolated_filter
+
+    ! Stop execution
+    STOP
+END FUNCTION CalculateSyntheticMagnitude
+
+  SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
     IMPLICIT NONE
-    REAL, INTENT(IN) :: teff, log_g, metallicity
-    CHARACTER(LEN=*), INTENT(IN) :: filepath
+    REAL(8), INTENT(IN) :: teff, log_g, metallicity
+    CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
     REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
 
     ! Remove INTENT for ALLOCATABLE arrays
@@ -408,15 +464,15 @@ module run_star_extras
     CHARACTER(LEN=100), ALLOCATABLE :: file_names(:)
 
     REAL, DIMENSION(:,:), ALLOCATABLE :: lookup_table
-    REAL, DIMENSION(:), ALLOCATABLE :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
     CHARACTER(LEN=256) :: lookup_file
 
-     lookup_file = TRIM(filepath) // '/lookup_table.csv'
+     lookup_file = TRIM(sed_filepath) // '/lookup_table.csv'
 
     ! Call to load the lookup table
     CALL LoadLookupTable(lookup_file, lookup_table, file_names, lu_logg, lu_meta, lu_teff)
     ! Interpolate Spectral Energy Distribution
-    CALL InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, filepath, wavelengths, fluxes)
+    CALL InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
     ! Calculate bolometric flux and magnitude
     CALL CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
 
@@ -592,15 +648,15 @@ module run_star_extras
 
   SUBROUTINE InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
     IMPLICIT NONE
-    REAL, INTENT(IN) :: teff, log_g, metallicity
+    REAL(8), INTENT(IN) :: teff, log_g, metallicity
     REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
     CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
     CHARACTER(LEN=100), INTENT(IN) :: file_names(:)  ! File names of stellar models
-    REAL, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
 
     INTEGER, DIMENSION(2) :: closest_indices
-    REAL, DIMENSION(:), ALLOCATABLE :: sed1_wavelengths, sed1_flux, sed2_wavelengths, sed2_flux
-    REAL, DIMENSION(:), ALLOCATABLE :: sed2_flux_rescaled
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: sed1_wavelengths, sed1_flux, sed2_wavelengths, sed2_flux
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: sed2_flux_rescaled
     REAL :: weight1, weight2
     CHARACTER(LEN=256) :: sed_dir1, sed_dir2  ! Paths to SED files
 
@@ -650,7 +706,7 @@ module run_star_extras
 
   SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
     IMPLICIT NONE
-    REAL, INTENT(IN) :: teff, log_g, metallicity
+    REAL(8), INTENT(IN) :: teff, log_g, metallicity
     REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
     INTEGER, DIMENSION(2), INTENT(OUT) :: closest_indices
 
@@ -688,13 +744,13 @@ module run_star_extras
     IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: directory
     INTEGER, INTENT(IN) :: index
-    REAL, DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
 
     CHARACTER(LEN=512) :: line
     INTEGER :: unit, n_rows, status, i
     REAL :: temp_wavelength, temp_flux
 
-    ! Generate the filepath
+    ! Generate the sed_filepath
     !PRINT *, "Debug: Attempting to open file: ", TRIM(directory)  ! Debugging line
 
     ! Open the file
@@ -750,24 +806,72 @@ module run_star_extras
 
     CLOSE(unit)
   END SUBROUTINE LoadSED
+  
+  
 
-
-  SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
+  SUBROUTINE LoadFilter(directory, filter_wavelengths, filter_trans)
     IMPLICIT NONE
-    REAL, INTENT(IN) :: x_in(:), y_in(:), x_out(:)
-    REAL, INTENT(OUT) :: y_out(:)
-    INTEGER :: i
+    CHARACTER(LEN=*), INTENT(IN) :: directory
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: filter_wavelengths, filter_trans
 
-    ! Ensure x_out is within bounds of x_in
-    DO i = 1, SIZE(x_out)
-      IF (x_out(i) < MINVAL(x_in) .OR. x_out(i) > MAXVAL(x_in)) THEN
-        y_out(i) = 0.0  ! Handle extrapolation
-      ELSE
-        ! Linear interpolation
-        CALL LinearInterpolate(x_in, y_in, x_out(i), y_out(i))
-      END IF
+    CHARACTER(LEN=512) :: line
+    INTEGER :: unit, n_rows, status, i
+    REAL :: temp_wavelength, temp_trans
+
+    ! Generate the sed_filepath
+    !PRINT *, "Debug: Attempting to open file: ", TRIM(directory)  ! Debugging line
+
+    ! Open the file
+    unit = 20
+    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not open file ", TRIM(directory)  ! Print the problematic path
+      STOP
+    END IF
+
+    ! Skip header line (filter file has just one line header)
+    READ(unit, '(A)', IOSTAT=status) line
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not read the file", TRIM(directory)
+      STOP
+    END IF
+
+    ! Count rows in the file
+    n_rows = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      n_rows = n_rows + 1
     END DO
-  END SUBROUTINE InterpolateArray
+
+    ! Allocate arrays
+    ALLOCATE(filter_wavelengths(n_rows))
+    ALLOCATE(filter_trans(n_rows))
+
+    ! Rewind to the first non-comment line
+    REWIND(unit)
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not rewind file", TRIM(directory)
+        STOP
+      END IF
+      IF (line(1:1) /= "#") EXIT
+    END DO
+
+    ! Read and parse data
+    i = 0
+    DO
+      READ(unit, *, IOSTAT=status) temp_wavelength, temp_trans
+      IF (status /= 0) EXIT
+      i = i + 1
+      filter_wavelengths(i) = temp_wavelength
+      filter_trans(i) = temp_trans
+    END DO
+
+    CLOSE(unit)
+  END SUBROUTINE LoadFilter  
+
 
 
 
@@ -778,29 +882,58 @@ module run_star_extras
   !## INTEGRATE OVER SED AND CALCULATE FLUX AND THEN US MAG OFFSET TO GENERATE BOLOMETRIC MAGNITUDE
   !****************************
 
-  SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
+!  SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
+!    IMPLICIT NONE
+!    REAL, DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+!    REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+!
+!    ! Perform trapezoidal integration over wavelengths
+!    CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
+!    PRINT *, wavelengths, fluxes, bolometric_flux
+!    IF (bolometric_flux > 0.0) THEN
+!       ! Use AB magnitude offset (consistent with Python's -48.6)
+!       bolometric_magnitude = -2.5 * LOG10(bolometric_flux) - 48.6
+!    ELSE
+!       bolometric_magnitude = 99.0  ! Assign a dummy value for invalid flux
+!       PRINT *, "Warning: Bolometric flux is zero or negative."
+!    END IF
+!    PRINT *, bolometric_flux, bolometric_magnitude
+!    STOP
+!  END SUBROUTINE CalculateBolometricFlux
+
+
+SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
     IMPLICIT NONE
-    REAL, DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
     REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+    INTEGER :: i
 
-    ! Perform trapezoidal integration over wavelengths
+    ! Validate inputs
+    DO i = 1, SIZE(wavelengths) - 1
+        IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
+            PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+            STOP
+        END IF
+    END DO
+    
+    ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
+    PRINT *, "Wavelengths :", wavelengths
+    PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
+    PRINT *, "Integrated Bolometric Flux (erg/cm2/s):", bolometric_flux
 
-    IF (bolometric_flux > 0.0) THEN
-       ! Use AB magnitude offset (consistent with Python's -48.6)
-       bolometric_magnitude = -2.5 * LOG10(bolometric_flux) - 48.6
-    ELSE
-       bolometric_magnitude = 99.0  ! Assign a dummy value for invalid flux
-       PRINT *, "Warning: Bolometric flux is zero or negative."
+    ! Validate integration result
+    IF (bolometric_flux <= 0.0) THEN
+        PRINT *, "Error: Flux integration resulted in non-positive value."
+        bolometric_magnitude = 99.0
+        RETURN
     END IF
-    PRINT *, bolometric_flux, bolometric_magnitude
-    !STOP
-  END SUBROUTINE CalculateBolometricFlux
 
+    ! Calculate bolometric magnitude
+    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 21.1
 
-
-
-
+    PRINT *, "Bolometric magnitude:", bolometric_magnitude
+END SUBROUTINE CalculateBolometricFlux
 
 
   !****************************
@@ -808,45 +941,96 @@ module run_star_extras
   !****************************
 
 
-  SUBROUTINE TrapezoidalIntegration(x, y, result)
-     IMPLICIT NONE
-     REAL, DIMENSION(:), INTENT(IN) :: x, y
-     REAL, INTENT(OUT) :: result
-
-     INTEGER :: i, n
-     REAL :: sum
-
-     n = SIZE(x)
-     sum = 0.0
-
-     ! Perform trapezoidal integration over the input arrays
-     DO i = 1, n - 1
-        sum = sum + 0.5 * (x(i+1) - x(i)) * (y(i+1) + y(i))
-     END DO
-
-     result = sum
-  END SUBROUTINE TrapezoidalIntegration
-
-
-
-  SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
+SUBROUTINE TrapezoidalIntegration(x, y, result)
     IMPLICIT NONE
-    REAL, INTENT(IN) :: x(:), y(:), x_val
-    REAL, INTENT(OUT) :: y_val
-    INTEGER :: i
+    REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
+    REAL, INTENT(OUT) :: result
 
-    ! Find the interval for interpolation
-    DO i = 1, SIZE(x) - 1
-      IF (x_val >= x(i) .AND. x_val <= x(i+1)) THEN
-        y_val = y(i) + (y(i+1) - y(i)) * (x_val - x(i)) / (x(i+1) - x(i))
-        RETURN
-      END IF
+    INTEGER :: i, n
+    REAL :: sum
+
+    n = SIZE(x)
+    sum = 0.0
+
+    ! Validate input sizes
+    IF (SIZE(x) /= SIZE(y)) THEN
+        PRINT *, "Error: x and y arrays must have the same size."
+        STOP
+    END IF
+
+    IF (SIZE(x) < 2) THEN
+        PRINT *, "Error: x and y arrays must have at least 2 elements."
+        STOP
+    END IF
+
+    ! Validate monotonicity of x
+    DO i = 1, n - 1
+        IF (x(i+1) <= x(i)) THEN
+            PRINT *, "Error: x array is not strictly increasing at index", i
+            STOP
+        END IF
     END DO
 
-    ! Default case: return 0.0 if no interval is found
-    y_val = 0.0
-  END SUBROUTINE LinearInterpolate
+    ! Validate y values
+    DO i = 1, n
+        IF (y(i) /= y(i)) THEN
+            PRINT *, "Error: y array contains NaN at index", i
+            STOP
+        END IF
 
+        IF (ABS(y(i)) == HUGE(y(i))) THEN
+            PRINT *, "Error: y array contains infinity at index", i
+            STOP
+        END IF
+    END DO
+
+    ! Perform trapezoidal integration
+    DO i = 1, n - 1
+        !PRINT *, "x(i):", x(i), "x(i+1):", x(i+1), "y(i):", y(i), "y(i+1):", y(i+1), "Contribution:", 0.5 * (x(i+1) - x(i)) * (y(i+1) + y(i))
+        sum = sum + 0.5 * (x(i+1) - x(i)) * (y(i+1) + y(i))
+    END DO
+
+    result = sum
+    !PRINT *, "Final integrated result:", result
+END SUBROUTINE TrapezoidalIntegration
+
+SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
+  IMPLICIT NONE
+  REAL(DP), INTENT(IN) :: x(:), y(:), x_val
+  REAL(DP), INTENT(OUT) :: y_val
+  INTEGER :: i
+  REAL :: slope
+
+  ! Default to 0.0 if x_val is out of bounds
+  IF (x_val < MINVAL(x) .OR. x_val > MAXVAL(x)) THEN
+    y_val = 0.0
+    RETURN
+  END IF
+
+  ! Find the interval and perform linear interpolation
+  DO i = 1, SIZE(x) - 1
+    IF (x_val >= x(i) .AND. x_val <= x(i + 1)) THEN
+      slope = (y(i + 1) - y(i)) / (x(i + 1) - x(i))
+      y_val = y(i) + slope * (x_val - x(i))
+      RETURN
+    END IF
+  END DO
+
+  ! Default case (should not reach here due to bounds check)
+  y_val = 0.0
+END SUBROUTINE LinearInterpolate
+
+SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
+  IMPLICIT NONE
+  REAL(DP), INTENT(IN) :: x_in(:), y_in(:), x_out(:)
+  REAL(DP), INTENT(OUT) :: y_out(:)
+  INTEGER :: i
+
+  ! Perform interpolation for each value in x_out
+  DO i = 1, SIZE(x_out)
+    CALL LinearInterpolate(x_in, y_in, x_out(i), y_out(i))
+  END DO
+END SUBROUTINE InterpolateArray
 
 
 end module run_star_extras

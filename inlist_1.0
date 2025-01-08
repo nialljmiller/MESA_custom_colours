@@ -15,25 +15,7 @@
       !Custom colors stuff, works better with pgstar_flag=.true.
 
       history_columns_file = 'custom_colors_history_columns.list'
-      
-      !color_num_files=3
-      
-      !Default color file
-      color_file_names(1)='lcb98cor.dat'
-      color_num_colors(1)=11 
-      
-      !custom file its a blackbody v band value
-      !color_file_names(2) = 'blackbody_2MASS.dat'
-      !color_num_colors(2) = 3  ! Set to the number of filters you want to read
 
-
-      ! File for extinction color corrections, note this is defined in T, log g, Av (not Fe/H as the bc's are)
-      ! So see run_star_extras on how to compute this 
-      ! Never use fake_av_v.txt for real, its made up numbers!
-      !color_file_names(3)='data/fake_av_v.txt'
-      !color_num_colors(3)=1 
-
-      !Set an estimated Av value
       extras_lrpar = 1
       extras_rpar(1) = 0.58d0
 
@@ -69,7 +51,7 @@
     trace_history_value_name(2) = 'log_rel_run_E_err'
 
     ! limit max_model_number as part of test_suite
-    max_model_number = 2000
+    max_model_number = 20000
     use_gold2_tolerances = .true.
 
     initial_mass = 19.0d0
@@ -78,12 +60,8 @@
     xa_central_lower_limit_species(1) = 'h1'
     xa_central_lower_limit(1) = 0.1d0
 
-    ! Replace x with a value between 0 and 1
-
-    x_character_ctrl(1) = 'data/stellar_models/Kurucz/'
+    x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'
     x_character_ctrl(2) = '/home/njm/mesa/star/test_suite/custom_colors/data/filters/JWST/NIRCam'
-    ! Values for the red and the blue edges of the IS estimated from Minilab 2
-    ! blue edge
 
     photo_interval = 100
     profile_interval = 100
@@ -97,6 +75,6 @@
     Color_magnitude1_win_flag = .true.
     Color_magnitude1_xaxis1_name = 'model_number'
     Color_magnitude1_yaxis1_name(1) = 'Mag_bol'
-        Color_magnitude1_num_panels = 1
+    Color_magnitude1_num_panels = 1
 
 / ! end of pgstar namelist
