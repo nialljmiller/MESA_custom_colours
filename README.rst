@@ -39,7 +39,7 @@ Use the provided example `inlist` as a template. Key parameters include:
 - **Filter profiles**: Define the path to filter profiles in `x_character_ctrl(2)`. 
 NOTE: THIS SHOULD BE THE INSTRUMENT PATH i.e. data/filters/JWST/**MIRI**
 
-```bash
+```fortran
 &controls
    initial_mass = 19.0d0
    initial_z = 0.014d0
