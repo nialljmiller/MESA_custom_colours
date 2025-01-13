@@ -36,16 +36,10 @@ MESA Colors Project
 Use the provided example `inlist` as a template. Key parameters include:
 
 - **Stellar model directory**: Specify the path to stellar models in `x_character_ctrl(1)`.
-- **Filter profiles**: Define the path to filter profiles in `x_character_ctrl(2)`.
+- **Filter profiles**: Define the path to filter profiles in `x_character_ctrl(2)`. 
+NOTE: THIS SHOULD BE THE INSTRUMENT PATH i.e. data/filters/JWST/**MIRI**
 
-```fortran
-&star_job
-   create_pre_main_sequence_model = .true.
-   save_model_filename = 'custom_colors_end.mod'
-   history_columns_file = 'custom_colors_history_columns.list'
-   extras_rpar(1) = 0.58d0
-/
-
+```bash
 &controls
    initial_mass = 19.0d0
    initial_z = 0.014d0
@@ -59,7 +53,7 @@ Use the provided example `inlist` as a template. Key parameters include:
 Run MESA as usual. The module integrates seamlessly into the MESA workflow:
 
 ```bash
-./rn
+./clean ./make ./rn
 ```
 
 ### 3. Outputs
