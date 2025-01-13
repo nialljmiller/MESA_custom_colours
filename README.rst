@@ -1,163 +1,141 @@
-.. _custom_colors:
+MESA Colors Project
+====================
 
-*************
-custom_colors
-*************
+**MESA Colors** is an extension for the Modules for Experiments in Stellar Astrophysics (MESA) toolkit, designed to enable synthetic photometry calculations and provide additional stellar evolution diagnostics. By incorporating bolometric corrections and synthetic magnitudes, it allows for detailed analysis of stellar properties under various filter systems and atmospheric models.
 
-This test suite example shows how to use user-defined color filter and extinction files.
+## Features
 
-This test case has 1 part. Click to see a larger view of a plot.
+- **Bolometric Corrections**: Calculate bolometric magnitudes and fluxes from stellar models.
+- **Synthetic Magnitudes**: Compute magnitudes using arbitrary filter profiles.
+- **Custom History Columns**: Append photometric diagnostics to the MESA history output.
+- **SED Interpolation**: Interpolate between stellar models to generate spectral energy distributions (SEDs).
+- **Flexible Filter System Integration**: Easily incorporate custom filter profiles for synthetic photometry.
 
-* Part 1 (``inlist_1.0``) builds a 1.0 Msun, Z=0.02 metallicity, pre-main sequence model and evolves until core hydrogen depletion (mass fraction h1 < 0.1). This example loads the default |LCB98| color filter ''lcb98cor.dat'', a custom color filter ``data/blackbody_bc_v.txt`` which in this case is blackbody V band filter, and a custom extinction color correction file ``data/fake_av_v.txt``. Example color-color, color-magnitude, magnitude-color and magnitude-magnitude plots:
+---
 
-.. image:: ../../../star/test_suite/custom_colors/docs/Color_magnitude1_000241.svg
-   :width: 100%
+## Installation
 
-.. image:: ../../../star/test_suite/custom_colors/docs/Color_magnitude2_000241.svg
-   :width: 100%
+1. Clone or download the MESA Colors module to your MESA project directory.
 
-.. image:: ../../../star/test_suite/custom_colors/docs/Color_magnitude3_000241.svg
-   :width: 100%
+   ```bash
+   git clone <repository_url> mesa_colors
+   ```
 
+2. Add `run_star_extras` to your project’s Fortran modules. Ensure it is linked with MESA's internal libraries (e.g., `star_lib`, `math_lib`).
 
-pgstar commands used for the first 7 plots:
+3. Copy the example `inlist` to your MESA project folder and modify it as needed.
 
-.. code-block:: console
+4. Make sure the necessary data files (e.g., stellar models, filter profiles) are in the specified directories (`data/stellar_models/` and `data/filters/`).
 
- &pgstar
+---
 
-   file_white_on_black_flag = .true. ! white_on_black flags -- true means white foreground color on black background
-   file_device = 'png'            ! png
-   file_extension = 'png'
+## Quick Start
 
-   !file_device = 'vcps'          ! postscript
-   !file_extension = 'ps'
+### 1. Setting Up the Inlist
 
-    pgstar_interval = 1
+Use the provided example `inlist` as a template. Key parameters include:
 
+- **Stellar model directory**: Specify the path to stellar models in `x_character_ctrl(1)`.
+- **Filter profiles**: Define the path to filter profiles in `x_character_ctrl(2)`.
 
- !# Color Magnitude Panels
-   ! Plots either color-color, color-magnitude, magnitude-color or magnitude-magnitude
+```fortran
+&star_job
+   create_pre_main_sequence_model = .true.
+   save_model_filename = 'custom_colors_end.mod'
+   history_columns_file = 'custom_colors_history_columns.list'
+   extras_rpar(1) = 0.58d0
+/
 
-      !### Color_magnitude1
+&controls
+   initial_mass = 19.0d0
+   initial_z = 0.014d0
+   x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'
+   x_character_ctrl(2) = 'data/filters/GAIA/GAIA'
+/
+```
 
-         Color_magnitude1_win_flag = .true.
+### 2. Running the Simulation
 
-         Color_magnitude1_win_width = 15
-         Color_magnitude1_win_aspect_ratio = 0.75 ! aspect_ratio = height/width
+Run MESA as usual. The module integrates seamlessly into the MESA workflow:
 
-         Color_magnitude1_xleft = 0.15
-         Color_magnitude1_xright = 0.85
-         Color_magnitude1_ybot = 0.15
-         Color_magnitude1_ytop = 0.85
-         Color_magnitude1_txt_scale = 1.0
-         Color_magnitude1_title = 'Color_magnitude1'
+```bash
+./rn
+```
 
-         ! setup default
-         Color_magnitude1_num_panels = 2
+### 3. Outputs
 
-         ! Plots xaxis1-xaxis2 leave xaxis2 blank if you only want to plot xaxis1.
-         Color_magnitude1_xaxis1_name = 'model_number'
-         Color_magnitude1_xaxis2_name = ''
+- **History Columns**: Bolometric magnitudes and fluxes will be appended to the MESA history output.
+- **Synthetic Magnitudes**: Computed for all filters defined in `custom_colors_history_columns.list`.
 
+---
 
-         ! Plots yaxis1-yaxis2 leave yaxis2 blank if you only want to plot yaxis1.
-         Color_magnitude1_yaxis1_name(1) = 'bc_B'
-         Color_magnitude1_yaxis2_name(1) = 'bc_U'
-         Color_magnitude1_yaxis_reversed(1) = .false.
-         
-         ! Plots `other_yaxis1-other_yaxis2` leave `other_yaxis2` blank if you only want to plot `other_yaxis1`.
-         Color_magnitude1_other_yaxis1_name(1) = 'abs_mag_V'
-         Color_magnitude1_other_yaxis2_name(1) = ''
-         Color_magnitude1_other_yaxis_reversed(1) = .true.
+## Directory Structure
 
+```
+mesa_colors/
+├── src/
+│   ├── run_star_extras.f90       # Main Fortran module
+│   ├── utilities.f90             # Helper functions for interpolation and file handling
+├── data/
+│   ├── stellar_models/           # Stellar models (Kurucz, PHOENIX, etc.)
+│   ├── filters/                  # Filter profiles (e.g., GAIA, HST, etc.)
+├── inlist                        # Example inlist
+```
 
-         Color_magnitude1_yaxis1_name(2) = 'bc_B'
-         Color_magnitude1_other_yaxis1_name(2) = 'bc_U'
-         
-         ! Enables calling a subroutine to add extra information to a plot
-         ! see `$MESA_DIR/star/other/pgstar_decorator.f90`
-         Color_magnitude1_use_decorator = .true.
+---
 
-         ! file output
-         Color_magnitude1_file_flag = .true.
-         Color_magnitude1_file_dir = 'png'
-         Color_magnitude1_file_prefix = 'Color_magnitude1_'
-         Color_magnitude1_file_interval = 5 ! output when `mod(model_number,Color_magnitude1_file_interval)==0`
-         Color_magnitude1_file_width = -1 ! (inches) negative means use same value as for window
-         Color_magnitude1_file_aspect_ratio = -1 ! negative means use same value as for window
+## Dependencies
 
+- MESA (Version 12778 or higher recommended)
+- Fortran Compiler (e.g., gfortran, ifort)
 
-      !### Color_magnitude2
+---
 
-         Color_magnitude2_win_flag = .true.
+## Key Subroutines and Functions
 
-         Color_magnitude2_win_width = 15
-         Color_magnitude2_win_aspect_ratio = 0.75 ! aspect_ratio = height/width
+### **Bolometric Magnitudes**
 
-         Color_magnitude2_xleft = 0.15
-         Color_magnitude2_xright = 0.85
-         Color_magnitude2_ybot = 0.15
-         Color_magnitude2_ytop = 0.85
-         Color_magnitude2_txt_scale = 1.0
-         Color_magnitude2_title = 'Color_magnitude2'
+- **`CalculateBolometricFlux`**: Computes the integrated bolometric flux and magnitude using trapezoidal integration.
 
-         ! Plots xaxis1-xaxis2 leave xaxis2 blank if you only want to plot xaxis1.
-         Color_magnitude2_xaxis1_name = 'abs_mag_B'
-         Color_magnitude2_xaxis2_name = 'abs_mag_U'
+- **`CalculateSyntheticMagnitude`**: Convolves SEDs with filter profiles to compute synthetic magnitudes.
 
-         ! Plots yaxis1-yaxis2 leave yaxis2 blank if you only want to plot yaxis1.
-         Color_magnitude2_yaxis1_name(1) = 'abs_mag_R'
-         Color_magnitude2_yaxis2_name(1) = 'abs_mag_J'
+### **SED Interpolation**
 
-         ! setup default
-         Color_magnitude2_num_panels = 1
-         ! file output
-         Color_magnitude2_file_flag = .true.
-         Color_magnitude2_file_dir = 'png'
-         Color_magnitude2_file_prefix = 'Color_magnitude2_'
-         Color_magnitude2_file_interval = 5 ! output when `mod(model_number,Color_magnitude2_file_interval)==0`
-         Color_magnitude2_file_width = -1 ! (inches) negative means use same value as for window
-         Color_magnitude2_file_aspect_ratio = -1 ! negative means use same value as for window
+- **`InterpolateSED`**: Interpolates between stellar models to produce continuous SEDs for arbitrary physical parameters.
 
+- **`LoadLookupTable`**: Reads the stellar model lookup table to find the closest matching models.
 
-      !### Color_magnitude3
+### **File Utilities**
 
-         Color_magnitude3_win_flag = .true.
+- **`LoadFilter`**: Loads custom filter profiles for synthetic photometry.
 
-         Color_magnitude3_win_width = 15
-         Color_magnitude3_win_aspect_ratio = 0.75 ! aspect_ratio = height/width
+- **`LoadSED`**: Loads SED data for stellar models.
 
-         Color_magnitude3_xleft = 0.15
-         Color_magnitude3_xright = 0.85
-         Color_magnitude3_ybot = 0.15
-         Color_magnitude3_ytop = 0.85
-         Color_magnitude3_txt_scale = 1.0
-         Color_magnitude3_title = 'Color_magnitude3'
+---
 
-         ! Plots xaxis1-xaxis2 leave xaxis2 blank if you only want to plot xaxis1.
-         Color_magnitude3_xaxis1_name = 'model_number'
-         Color_magnitude3_xaxis2_name = ''
+## Example Workflow
 
-         ! Plots yaxis1-yaxis2 leave yaxis2 blank if you only want to plot yaxis1.
-         Color_magnitude3_yaxis1_name(1) = 'bc_v_bb'
-         
-         Color_magnitude3_other_yaxis1_name(1) = 'av_v'
-         
-         ! setup default
-         Color_magnitude3_num_panels = 1
-         ! file output
-         Color_magnitude3_file_flag = .true.
-         Color_magnitude3_file_dir = 'png'
-         Color_magnitude3_file_prefix = 'Color_magnitude3_'
-         Color_magnitude3_file_interval = 5 ! output when `mod(model_number,Color_magnitude3_file_interval)==0`
-         Color_magnitude3_file_width = -1 ! (inches) negative means use same value as for window
-         Color_magnitude3_file_aspect_ratio = -1 ! negative means use same value as for window
+1. Prepare the `stellar_models/` and `filters/` directories with your data.
+2. Define desired filters in `custom_colors_history_columns.list`.
+3. Run the MESA simulation.
+4. Analyze the outputs in the MESA history files.
 
+---
 
- / ! end of pgstar namelist
+## Contributing
 
-.. |LCB98| replace:: `Lejeune, Cuisinier, & Buser (1998) <https://ui.adsabs.harvard.edu/abs/1998A%26AS..130...65L/abstract>`__
+Contributions are welcome! Please follow the existing coding style and submit a pull request. For major changes, open an issue to discuss the proposed changes.
 
-Last-Updated: 05Jun2021 (MESA 5be9e57) by fxt
+---
+
+## License
+
+This project is licensed under the GNU General Public License (GPL) v2 or later. See the `LICENSE` file for details.
+
+---
+
+## Acknowledgments
+
+This project was inspired by the need for more detailed synthetic photometry in stellar evolution simulations. It incorporates insights from MESA's development community and builds upon the work of Rob Farmer and the MESA Team.
+
 
