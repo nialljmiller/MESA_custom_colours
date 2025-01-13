@@ -1,0 +1,294 @@
+#Understanding and Modifying MESA colour Routines
+
+
+
+
+
+- **Bolometric Correction**:
+  - MESA starts by determining the bolometric correction (`bc`) for a given filter using the `get_bc_by_name` function.
+  - `get_bc_by_name` calls `Eval_Colors`, which performs interpolations on color data tables based on stellar parameters like `log_Teff`, `log_g`, and `M_div_h`.
+
+- **Color and BC Interpolation**:
+  - `Eval_Colors` is a core function where interpolation happens. It takes temperature (`log_Teff`), surface gravity (`log_g`), and metallicity ratio (`M_div_h`) as inputs.
+  - This function traverses a linked list structure of color tables (`thead`, `glist`, `zlist`) to find the closest match for these parameters.
+  - If exact matches aren’t found, `Eval_Colors` linearly interpolates between adjacent values to approximate the bolometric correction for the specific filter and stellar parameters.
+
+- **Absolute Magnitude Calculation**:
+  - Once the bolometric correction is determined, the absolute magnitude calculation for the filter is handled by the `get_abs_mag_by_name` function.
+  - MESA uses the formula:
+    
+    M = M_sun + BC - 2.5 log(L/L_sun)
+    
+  - Here, M_sun is the bolometric magnitude of the Sun, and L/L_sun is the star’s luminosity ratio relative to the Sun.
+
+- **Temperature Boundary Checks**:
+  - If the temperature, gravity, or metallicity values are outside the range supported by the colour data tables, `Eval_Colors` assigns a default value (often `-1d99`), signaling an out-of-range error.
+  - These errors are handled by other parts of MESA, ensuring boundary conditions don’t result in failed calculations.
+
+- **Output**:
+  - After determining the absolute magnitude for each filter, MESA can output these values (or bolometric corrections) in a custom history file using `history_columns.list`, if specified by the user.
+
+
+TEMPLATE
+### **[month], 2024**  
+**Objective**: 
+
+**Notes**:
+- 
+- 
+
+**Next Steps**:  
+1. 
+2. 
+
+---
+---
+
+### **October, 2024**  
+**Objective**: Set up and retrieve astronomical filter data from the SVO FPS service based on wavelength ranges.
+
+**Notes**:
+- Defined broad wavelength ranges for various spectral regions (e.g., X-ray, UV, Optical) in Angstroms to categorise filters by their effective wavelength.
+- Implemented a loop to retrieve filters within each wavelength range using `SvoFps.get_filter_index`, storing each result in `all_filters`.
+- Increased the timeout for `SvoFps` queries to account for larger data requests, avoiding premature timeout errors.
+- Encountered connection timeout errors with default settings, resolved by increasing `TIMEOUT` to 5 minutes.
+- need to split data into wavelength ranges as gets rejected otherwise
+
+**Next Steps**:  
+1. Combine retrieved filters into a single table and remove duplicates.
+2. Convert the combined filter data to a DataFrame format for easier manipulation.
+
+---
+
+### **October, 2024**  
+**Objective**: Combine and structure filter data.
+
+**Notes**:
+- stacked all filters into a single table using `astropy.table.vstack`, followed by `unique()` to remove duplicate filters by `filterID`.
+- Converted the combined filter table to a Pandas DataFrame
+- Created a base directory (`data/filters`) 
+- Noticed inconsistencies in filter naming, especially when some fields were empty or unnamed. Added handling for empty filter names by substituting parts of the `filterID`.
+
+**Next Steps**:  
+1. Implement loop to download transmission data for each filter.
+2. Develop naming conventions to create valid directory and file names for each filter.
+
+---
+
+### **October, 2024**  
+**Objective**: Download and save transmission data for each filter in a structured directory.
+
+**Notes**:
+- Implemented a loop to iterate over each filter in the DataFrame, organising output by `Facility` and `Instrument` within `data/filters`.
+- Cleaned up directory and file names, replacing invalid characters to ensure compatibility with file systems.
+- Downloaded transmission data for each filter and saved it as a `.dat` file, structured by facility and instrument directories.
+- Some filters had no transmission data; added error handling to skip these cases and log warnings.
+- Occasionally, encountered missing `Facility` or `Instrument` names. Set defaults as "UnknownFacility" and "UnknownInstrument" to maintain consistency in directory structure.
+
+**Next Steps**:  
+1. Review saved files for completeness and formatting consistency.
+2. Run checks to ensure all filters have been downloaded correctly and saved in appropriate directories.
+
+---
+
+### **Octiber, 2024**  
+**Objective**: Review the current approach for processing filter files to prepare for a generalised routine that can handle multiple filter families.
+
+**Notes**:
+- Analysed existing code that processes Johnson filters (u, b, v, r, i), which outputs a single blackbody file based on hardcoded filters and file paths.
+- Identified that expanding the functionality to dynamically process nested filter families would require a more flexible file-handling approach.
+
+**Next Steps**:  
+1. Outline a strategy for handling nested directories and variable file names.
+2. Plan to integrate directory scanning functionality to automatically identify filter families and subfamilies.
+
+---
+
+### **October, 2024**  
+**Objective**: Plan directory scanning for automatic filter family detection and consolidation.
+
+**Notes**:
+- Decided on `os.walk` as the tool to navigate the filter directories.
+- Identified that each overarching family (e.g., JWST) should output a single file, regardless of how many subfamilies it contains.
+
+**Next Steps**:  
+1. Draft code for scanning directories and identifying unique families and their respective subfamily filters.
+2. Test `os.walk` functionality on a mock file structure.
+
+---
+
+### **October, 2024**  
+**Objective**: Implement basic file structure scanning to detect and classify filter families.
+
+**Notes**:
+- Created initial code using `os.walk` to detect family and subfamily directories within the filter data structure.
+- Successfully categorised filters by their top-level family names, preparing for a consolidated file output format.
+
+**Next Steps**:  
+1. Integrate filter data loading and processing functions within the directory scanning structure.
+2. Add error handling for cases where directories are empty or improperly formatted.
+
+---
+
+### **October, 2024**  
+**Objective**: Develop generalisable filter processing routines that can adapt to different filters and subfamilies.
+
+**Notes**:
+- Started restructuring the `do_one` function to handle each filter file based on its file path rather than assuming specific Johnson filter names.
+- Adjusted `do_one` to dynamically name columns based on each detected filter, preparing for output flexibility.
+- WILL NOT COMPILE
+**Next Steps**:  
+1. Implement dynamic header generation based on detected filters.
+2. Test `do_one` with a variety of file paths and data formats to confirm compatibility.
+
+---
+
+### **October, 2024**  
+**Objective**: Create the main function to manage processing across filter families and generate consolidated output files.
+
+**Notes**:
+- Developed `process_filter_families`, which combines the directory scan with filter processing, creating one output per overarching filter family.
+- Implemented a mechanism to detect unique filters within a family and produce a unified blackbody file for each.
+
+**Next Steps**:  
+1. Test end-to-end functionality using sample filter data across multiple families.
+2. Verify that output files are formatted consistently and named correctly for each family.
+
+---
+
+### **October, 2024**  
+**Objective**: Test and validate code with a real-world filter data directory structure.
+
+**Notes**:
+- Ran the updated program on a directory containing sample filters and families. Verified that the code successfully generated consolidated files for each family.
+- Confirmed that filters from subfamilies within a family (e.g., JWST/miri and JWST/nircam) were correctly combined into a single output file for JWST.
+- Encountered mismatches in column headers for filters with unique names across subfamilies, requiring adjustments to the header generation logic.
+
+**Next Steps**:  
+1. Refine header generation to ensure column consistency.
+2. Finalise error handling for cases of missing or misformatted data files.
+
+---
+
+### **October, 2024**  
+**Objective**: Improve output file handling and finalise header structure for clarity.
+
+**Notes**:
+- Updated header generation to dynamically include filter names based on file contents, ensuring a consistent structure.
+- Adjusted code to handle cases where some expected filters might be missing, with placeholders in the output where appropriate.
+
+**Next Steps**:  
+1. Document the structure and purpose of each function for future integration into a larger project.
+2. Prepare code for integration testing with additional filter families beyond the initial test set.
+
+---
+
+### **October, 2024**  
+**Notes**:
+- Verified the full end-to-end functionality of the updated code, ensuring it meets project specifications for processing nested filter families.
+  
+
+### **October, 2024**  
+**Objective**: Begin exploring MESA’s routines related to colour and magnitude calculations, especially focusing on where and how MESA handles absolute magnitudes and bolometric corrections.  
+
+**Notes**:
+- Started by examining `colours_lib` and `mod_colours` in MESA, focusing on subroutines related to colour/magnitude processing.
+- Noted that MESA’s default files use the Lejeune, Cuisinier, Buser (1998) colour-magnitude data, which can be supplemented or replaced by custom files.  
+
+**Next Steps**:  
+1. Look into how MESA loads and interprets colour data files.
+2. Understand how `abs_mag` values are interpolated for custom filters.
+
+---
+
+### **October, 2024**  
+**Objective**: Explore colour data loading and initialisation routines in more detail, specifically `do_colours_init` in `mod_colours`.
+
+**Notes**:
+- Located `do_colours_init`, which initialises colour data by loading specified files. This routine processes `num_files`, `fnames`, and `num_colours` as input to create a list of available filters and colours.
+- Found that the `history_columns.list` file can be customised to output specific colour or bolometric correction (`bc`) information.
+- Ran into some compilation errors due to the `INTENT(INOUT)` setting on `num_colours`, which MESA’s initialisation script seems sensitive to.
+
+**Next Steps**:
+1. Modify `history_columns.list` to log colour and bolometric corrections.
+2. Examine colour initialisation errors more closely and attempt to correct them.
+
+---
+
+### **October, 2024**  
+**Objective**: Resolve compilation issues in `mod_colours` and gain a deeper understanding of `do_colours_init`.
+
+**Notes**:
+- Debugged `do_colours_init`, identifying and resolving issues with `INTENT(INOUT)` in `num_colours`. The error arose because MESA was not prepared to treat `num_colours` as modifiable, causing allocation issues.
+- Adjusted the code so `num_colours` retains `INTENT(IN)` but is allocated dynamically in the data-loading routines.
+- Success! Managed to compile without errors and loaded sample data files.
+
+---
+
+### **October, 2024**  
+**Objective**: Begin adding custom colour data for JWST filters and interpret the calculations MESA performs on this data.
+
+**Notes**:
+- Added `blackbody_bc_JWST.dat` to `colour_file_names` in my inlist file, specifying it as a custom data source for JWST filters.
+- Experimented with loading just a subset of JWST filters, given the large file size.
+- Noted that MESA uses a linked list structure (`thead`, `glist`, and `zlist`) to store colour data. `do_colours_init` calls `Eval_colours` for interpolations based on the `log_Teff`, `log_g`, and `M_div_h` parameters.
+
+---
+
+### **October, 2024**  
+**Objective**: Trace how MESA interpolates and calculates absolute magnitudes and bolometric corrections.  
+
+**Notes**:
+- Traced the routine `get_abs_mag_by_name`, which calls `get_bc_by_name` to obtain bolometric correction values for specific filters.
+- Discovered that `get_bc_by_name` ultimately calls `Eval_colours`, where most of the colour data interpolation happens based on stellar parameters.
+- Spent some time understanding `Eval_colours` logic, which linearly interpolates between two temperature points if an exact match is unavailable. This involves two main helper routines: `get_glist_results` and `get_zlist_results`.
+
+---
+
+### **October 21, 2024**  
+**Objective**: Fully understand `Eval_colours` and document how it works.
+
+**Notes**:
+- Documented `Eval_colours` in detail. Found that it takes `log_Teff`, `log_g`, and `M_div_h` as inputs and outputs an interpolated array of colour/magnitude values.
+- Learned that the routine traverses a linked list structure (`thead`), checking each temperature node (`tlist`) and interpolating between them when necessary. 
+- The subroutine returns a specific error code when temperature is out of bounds, which is handled by other parts of the code.
+
+---
+
+### **October 28, 2024**  
+**Objective**: Test custom JWST filter data to ensure the interpolation routines handle it correctly.
+
+**Notes**:
+- Added a larger `blackbody_bc_JWST.dat` file to `colour_file_names` and tested it in MESA runs.
+- Verified that MESA interpolates magnitudes and `bc` values for JWST filters without issues.
+- Added several filter-specific bolometric corrections to `history_columns.list`, enabling logging for all JWST bands.
+
+**Next Steps**:
+- Test different temperature and metallicity ranges to see how `Eval_colours` responds to boundary conditions.
+
+---
+
+### **November, 2024**  
+**Objective**: Address boundary conditions in `Eval_colours` for custom data files.
+
+**Notes**:
+- Tested temperature and metallicity ranges for JWST filters to ensure `Eval_colours` returns valid values within the supported range.
+- Found that values beyond the data limits return `-1d99` as expected. Adjusted `get_glist_results` to avoid interpolation errors by handling out-of-range cases more explicitly.
+
+
+
+
+
+Grep for stop at phase. 
+ag "stop_at_phase"
+EEP = Equal evolutionay point
+We should interface with the EEP system for classifying stellar tracks. what type of star is it
+
+this gives the pgtsics definitions 
+
+
+
+
+
+
+MESA/mesa/conts/public/const_def.f90

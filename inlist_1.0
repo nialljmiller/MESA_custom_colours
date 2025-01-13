@@ -61,7 +61,7 @@
     xa_central_lower_limit(1) = 0.1d0
 
     x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'
-    x_character_ctrl(2) = '/home/njm/mesa/star/test_suite/custom_colors/data/filters/JWST/NIRCam'
+    x_character_ctrl(2) = 'data/filters/GAIA/GAIA'
 
     photo_interval = 100
     profile_interval = 100
