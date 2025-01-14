@@ -393,9 +393,9 @@ module run_star_extras
 
 SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
   IMPLICIT NONE
-  REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
-  REAL(DP), DIMENSION(:), INTENT(IN) :: filter_wavelengths, filter_trans
-  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: convolved_flux
+  REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
+  REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
   REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
   INTEGER :: n
 
@@ -512,7 +512,7 @@ INTEGER :: max_size
    CLOSE(10)
 
     ! Stop execution
-   STOP
+   !STOP
 END FUNCTION CalculateSyntheticMagnitude
 
   SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
