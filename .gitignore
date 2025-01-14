@@ -1,6 +1,11 @@
 # Ignore the data directory
 data/
 
+
+# Include specific folders in data/
+!data/filters/GAIA/GAIA/
+!data/stellar_models/Kurucz2003all/
+
 # Ignore compiled files (e.g., executables, object files, binaries)
 *.o
 *.out
