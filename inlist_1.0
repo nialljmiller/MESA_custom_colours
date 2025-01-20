@@ -4,8 +4,9 @@
 
 &star_job
 
-      create_pre_main_sequence_model = .true.
-      
+      create_pre_main_sequence_model = .false.
+      pre_ms_relax_to_start_radiative_core = .false.
+    
       save_model_when_terminate = .true.
       save_model_filename = 'custom_colors_end.mod'
       required_termination_code_string = 'xa_central_lower_limit'
@@ -54,8 +55,8 @@
     max_model_number = 20000
     use_gold2_tolerances = .true.
 
-    initial_mass = 19.0d0
-    initial_z = 0.014d0
+    initial_mass = 1.0d0
+    initial_z = 0.02d0
 
     xa_central_lower_limit_species(1) = 'h1'
     xa_central_lower_limit(1) = 0.1d0

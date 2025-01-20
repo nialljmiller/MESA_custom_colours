@@ -320,7 +320,7 @@ module run_star_extras
       integer :: num_strings
       REAL(dp) :: teff, log_g, metallicity
       CHARACTER(LEN=256) :: sed_filepath, filter_filepath, filter_name, filter_dir
-      REAL :: bolometric_magnitude, bolometric_flux
+      REAL(DP) :: bolometric_magnitude, bolometric_flux
       REAL(DP), DIMENSION(:), ALLOCATABLE :: wavelengths, fluxes, filter_wavelengths, filter_trans
       ierr = 0
       call star_ptr(id, s, ierr)
@@ -338,7 +338,7 @@ module run_star_extras
       if (allocated(array_of_strings)) deallocate(array_of_strings)
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
-      print *, array_of_strings, num_strings, id
+      !print *, array_of_strings, num_strings, id
       !STOP
 
       CALL CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux,wavelengths, fluxes, sed_filepath)
@@ -347,8 +347,9 @@ module run_star_extras
 
       names(2) = "Flux_bol"
       vals(2) = bolometric_flux 
-      !print *, '1111111111111111', wavelengths, SIZE(wavelengths)
-      !print *, teff, log_g, metallicity
+      
+
+      print *, "################################################"
       !STOP
       ! Validate and populate values
       if (allocated(array_of_strings)) then
@@ -360,16 +361,18 @@ module run_star_extras
               end if
 
               names(i) = filter_name
-              !print *, '2222222222222222', wavelengths, SIZE(wavelengths)
+              print *, "  Filter:", filter_name
               ! Prepend filter name with filter dir to generate filepath
               filter_filepath = trim(filter_dir) // "/" // array_of_strings(i-2)
-              
-              if (s%T(1) >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
-                  vals(i) = CalculateSyntheticMagnitude(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
-              else
-                  vals(i) = -1.0_dp ! Assign an error avlue
-                  ierr = 1          ! Indicate an error
-              end if
+
+            if (s%T(1) >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
+                vals(i) = CalculateSyntheticMagnitude(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
+                !STOP
+                if (ierr /= 0) vals(i) = -1.0_dp
+            else
+                vals(i) = -1.0_dp
+                ierr = 1
+            end if
           end do
       else
           ierr = 1 ! Indicate an error if array_of_strings is not allocated
@@ -404,7 +407,7 @@ SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, co
   ! Allocate arrays
   ALLOCATE(interpolated_filter(n))
   ALLOCATE(convolved_flux(n))
-  !print *, wavelengths, 'aaaaaa'
+
   ! Interpolate the filter transmission onto the wavelengths array
   CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
 
@@ -415,6 +418,38 @@ SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, co
   DEALLOCATE(interpolated_filter)
 END SUBROUTINE ConvolveSED
 
+SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
+    IMPLICIT NONE
+    REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+    REAL(DP), INTENT(OUT) :: synthetic_magnitude, synthetic_flux
+    INTEGER :: i    
+
+    ! Validate inputs
+    DO i = 1, SIZE(wavelengths) - 1
+        IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
+            PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+            STOP
+        END IF
+    END DO
+    
+    ! Perform trapezoidal integration
+    CALL TrapezoidalIntegration(wavelengths, fluxes, synthetic_flux)
+    !PRINT *, "Wavelengths :", wavelengths
+    !PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
+    !PRINT *, "Integrated synthetic Flux (erg/cm2/s):", synthetic_flux
+
+    ! Validate integration result
+    IF (synthetic_flux <= 0.0) THEN
+        PRINT *, "Error: Flux integration resulted in non-positive value."
+        synthetic_magnitude = 99.0
+        RETURN
+    END IF
+
+    ! Calculate synthetic magnitude
+    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) + 21.1
+
+    !PRINT *, "synthetic magnitude:", synthetic_magnitude
+END SUBROUTINE CalculateSyntheticFlux
 
 
 REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
@@ -422,104 +457,83 @@ REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity,
     REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
     CHARACTER(LEN=*), INTENT(IN) :: filter_filepath     
     INTEGER, INTENT(OUT) :: ierr
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: wavelengths, fluxes, filter_wavelengths, filter_trans
-    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
-    REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
-    REAL(DP) :: bolometric_flux
-    INTEGER :: n_wavelengths
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: filter_wavelengths, filter_trans
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux, interpolated_filter
+    REAL(DP) :: synthetic_magnitude, synthetic_flux
+    INTEGER :: max_size, i
 
-INTEGER :: max_size
-   INTEGER :: i
-   ! Define the kinds for each array
-   INTEGER, PARAMETER :: kind_wavelengths = KIND(wavelengths(1))
-   INTEGER, PARAMETER :: kind_fluxes = KIND(fluxes(1))
-   INTEGER, PARAMETER :: kind_convolved_flux = KIND(convolved_flux(1))
-   INTEGER, PARAMETER :: kind_interpolated_filter = KIND(interpolated_filter(1))
-
-    print *, "Filter File Path: ", filter_filepath
     ierr = 0
 
     ! Load filter data
     CALL LoadFilter(filter_filepath, filter_wavelengths, filter_trans)
 
     ! Check for invalid gravity input
-    IF (gravity == 0.0_DP) THEN
+    IF (gravity <= 0.0_DP) THEN
         ierr = 1
-        CalculateSyntheticMagnitude = 0.0_DP
+        CalculateSyntheticMagnitude = -1.0_DP
         RETURN
     END IF
-    !print *, '333333333333333', wavelengths, SIZE(wavelengths)
-    ! Determine size of wavelengths
-    n_wavelengths = SIZE(wavelengths)
+    
+    ! Allocate interpolated_filter if not already allocated
+    IF (.NOT. ALLOCATED(interpolated_filter)) THEN
+        ALLOCATE(interpolated_filter(SIZE(wavelengths)))
+        interpolated_filter = 0.0_DP
+    END IF
 
-    ! Allocate the interpolated filter array
-    ALLOCATE(interpolated_filter(n_wavelengths))
-
+    ! Perform SED convolution
     CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
 
+    ! Calculate synthetic flux and magnitude
+    CALL CalculateSyntheticFlux(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux)
 
+    ! Return synthetic magnitude
+    IF (synthetic_flux > 0.0_DP) THEN
+        CalculateSyntheticMagnitude = synthetic_magnitude
+    ELSE
+        ierr = 1
+        CalculateSyntheticMagnitude = -1.0_DP
+    END IF
 
-   ! Wavelengths
-   print *, "Filter Wavelengths: "
-   print *, "  Size: ", SIZE(filter_wavelengths)
-   print *, "  Median: ", filter_wavelengths(SIZE(filter_wavelengths) / 2)
-   print *, "  Range: ", MINVAL(filter_wavelengths), " to ", MAXVAL(filter_wavelengths)
+    ! Debugging information
+    !PRINT *, "Filter Wavelengths: "
+    !PRINT *, "  Size: ", SIZE(filter_wavelengths)
+    !PRINT *, "  Median: ", filter_wavelengths(SIZE(filter_wavelengths) / 2)
+    !PRINT *, "  Range: ", MINVAL(filter_wavelengths), " to ", MAXVAL(filter_wavelengths)
 
-   ! Wavelengths
-   print *, "Wavelengths: "
-   print *, "  Size: ", SIZE(wavelengths)
-   print *, "  Median: ", wavelengths(SIZE(wavelengths) / 2)
-   print *, "  Range: ", MINVAL(wavelengths), " to ", MAXVAL(wavelengths)
+    !PRINT *, "Wavelengths: "
+    !PRINT *, "  Size: ", SIZE(wavelengths)
+    !PRINT *, "  Median: ", wavelengths(SIZE(wavelengths) / 2)
+    !PRINT *, "  Range: ", MINVAL(wavelengths), " to ", MAXVAL(wavelengths)
 
-   ! Interpolated Filter
-   print *, "Interpolated Filter: "
-   print *, "  Size: ", SIZE(interpolated_filter)
-   print *, "  Median: ", interpolated_filter(SIZE(interpolated_filter) / 2)
-   print *, "  Range: ", MINVAL(interpolated_filter), " to ", MAXVAL(interpolated_filter)
+    !PRINT *, "Interpolated Filter: "
+    !PRINT *, "  Size: ", SIZE(interpolated_filter)
+    !PRINT *, "  Median: ", interpolated_filter(SIZE(interpolated_filter) / 2)
+    !PRINT *, "  Range: ", MINVAL(interpolated_filter), " to ", MAXVAL(interpolated_filter)
 
-   ! Fluxes
-   print *, "Fluxes: "
-   print *, "  Size: ", SIZE(fluxes)
-   print *, "  Median: ", fluxes(SIZE(fluxes) / 2)
-   print *, "  Range: ", MINVAL(fluxes), " to ", MAXVAL(fluxes)
+    !PRINT *, "Fluxes: "
+    !PRINT *, "  Size: ", SIZE(fluxes)
+    !PRINT *, "  Median: ", fluxes(SIZE(fluxes) / 2)
+    !PRINT *, "  Range: ", MINVAL(fluxes), " to ", MAXVAL(fluxes)
 
-   ! Convolved Fluxes
-   print *, "Convolved Fluxes: "
-   print *, "  Size: ", SIZE(convolved_flux)
-   print *, "  Median: ", convolved_flux(SIZE(convolved_flux) / 2)
-   print *, "  Range: ", MINVAL(convolved_flux), " to ", MAXVAL(convolved_flux)
-   
-      
-   ! Open the CSV file for writing
-   OPEN(UNIT=10, FILE="full_arrays.csv", STATUS="REPLACE", ACTION="WRITE")
+    !PRINT *, "Convolved Fluxes: "
+    !PRINT *, "  Size: ", SIZE(convolved_flux)
+    !PRINT *, "  Median: ", convolved_flux(SIZE(convolved_flux) / 2)
+    !PRINT *, "  Range: ", MINVAL(convolved_flux), " to ", MAXVAL(convolved_flux)
+    
+    print *, "  Synthetic_magnitude: ", synthetic_magnitude
+    print *, "  Synthetic Flux: ", synthetic_flux
 
-   ! Write a header row to indicate columns
-   WRITE(10, '(A)') "Index,Wavelengths,Fluxes,Convolved Fluxes,Interpolated Filter"
-
-   ! Determine the maximum size among the arrays
-   max_size = MAX(SIZE(wavelengths), SIZE(fluxes), SIZE(convolved_flux), SIZE(interpolated_filter))
-
-   ! Loop through the arrays and write their values
-   DO i = 1, max_size
-       WRITE(10, '(I6,",",4(F15.6,","))') i, &
-           MERGE(wavelengths(i), 0.0_kind_wavelengths, i <= SIZE(wavelengths)), &
-           MERGE(fluxes(i), 0.0_kind_fluxes, i <= SIZE(fluxes)), &
-           MERGE(convolved_flux(i), 0.0_kind_convolved_flux, i <= SIZE(convolved_flux)), &
-           MERGE(interpolated_filter(i), 0.0_kind_interpolated_filter, i <= SIZE(interpolated_filter))
-   END DO
-
-   ! Close the CSV file
-   CLOSE(10)
-
-    ! Stop execution
-   !STOP
 END FUNCTION CalculateSyntheticMagnitude
+
+
+
 
   SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
     IMPLICIT NONE
     REAL(8), INTENT(IN) :: teff, log_g, metallicity
     CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
-    REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
 
     ! Remove INTENT for ALLOCATABLE arrays
     REAL, ALLOCATABLE :: lu_logg(:), lu_meta(:), lu_teff(:)
@@ -940,34 +954,11 @@ END FUNCTION CalculateSyntheticMagnitude
 
 
 
-  !****************************
-  !## INTEGRATE OVER SED AND CALCULATE FLUX AND THEN US MAG OFFSET TO GENERATE BOLOMETRIC MAGNITUDE
-  !****************************
-
-!  SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
-!    IMPLICIT NONE
-!    REAL, DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
-!    REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
-!
-!    ! Perform trapezoidal integration over wavelengths
-!    CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
-!    PRINT *, wavelengths, fluxes, bolometric_flux
-!    IF (bolometric_flux > 0.0) THEN
-!       ! Use AB magnitude offset (consistent with Python's -48.6)
-!       bolometric_magnitude = -2.5 * LOG10(bolometric_flux) - 48.6
-!    ELSE
-!       bolometric_magnitude = 99.0  ! Assign a dummy value for invalid flux
-!       PRINT *, "Warning: Bolometric flux is zero or negative."
-!    END IF
-!    PRINT *, bolometric_flux, bolometric_magnitude
-!    STOP
-!  END SUBROUTINE CalculateBolometricFlux
-
 
 SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
-    REAL, INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
     INTEGER :: i
 
     ! Validate inputs
@@ -980,9 +971,9 @@ SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bo
     
     ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
-    PRINT *, "Wavelengths :", wavelengths
-    PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
-    PRINT *, "Integrated Bolometric Flux (erg/cm2/s):", bolometric_flux
+    !PRINT *, "Wavelengths :", wavelengths
+    !PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
+    !PRINT *, "Integrated Bolometric Flux (erg/cm2/s):", bolometric_flux
 
     ! Validate integration result
     IF (bolometric_flux <= 0.0) THEN
@@ -994,7 +985,7 @@ SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bo
     ! Calculate bolometric magnitude
     bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 21.1
 
-    PRINT *, "Bolometric magnitude:", bolometric_magnitude
+    !PRINT *, "Bolometric magnitude:", bolometric_magnitude
 END SUBROUTINE CalculateBolometricFlux
 
 
@@ -1006,7 +997,7 @@ END SUBROUTINE CalculateBolometricFlux
 SUBROUTINE TrapezoidalIntegration(x, y, result)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
-    REAL, INTENT(OUT) :: result
+    REAL(DP), INTENT(OUT) :: result
 
     INTEGER :: i, n
     REAL :: sum
@@ -1065,7 +1056,7 @@ SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
   REAL(DP) :: slope
 
   
-   PRINT *, "x size: ", SIZE(x), " y size: ", SIZE(y)
+   !PRINT *, "x size: ", SIZE(x), " y size: ", SIZE(y)
    !PRINT *, "x_val: ", x_val
    !PRINT *, "x: ", x
    !PRINT *, "y: ", y
@@ -1085,11 +1076,11 @@ SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
 
   ! Handle out-of-bounds cases
   IF (x_val < MINVAL(x)) THEN
-    PRINT *, "Warning: x_val is below the minimum x."
+    !PRINT *, "Warning: x_val is below the minimum x."
     y_val = y(1)  ! Assign the first y value
     RETURN
   ELSE IF (x_val > MAXVAL(x)) THEN
-    PRINT *, "Warning: x_val is above the maximum x."
+    !PRINT *, "Warning: x_val is above the maximum x."
     y_val = y(SIZE(y))  ! Assign the last y value
     RETURN
   END IF

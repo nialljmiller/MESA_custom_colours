@@ -1011,3 +1011,89 @@
     - inlist: inlist_1.0_header
     - inlist: inlist_1.0_header
     - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+      runtime_minutes:   1.63
+      model_number:           96
+      star_age:     7.3250571844776524E+06
+      num_retries:            0
+      log_rel_run_E_err:        -8.7367219341775826
+      steps:           96
+      retries:            0
+      redos:            0
+      solver_calls_made:           96
+      solver_calls_failed:            0
+      solver_iterations:          757
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+      runtime_minutes:   2.20
+      model_number:           96
+      star_age:     7.3250571844776524E+06
+      num_retries:            0
+      log_rel_run_E_err:        -8.7367219341775826
+      steps:           96
+      retries:            0
+      redos:            0
+      solver_calls_made:           96
+      solver_calls_failed:            0
+      solver_iterations:          757
+    - inlist: inlist_1.0_header
+      runtime_minutes:   0.86
+      model_number:           91
+      star_age:     5.1171719898276310E+09
+      num_retries:            0
+      log_rel_run_E_err:       -10.5257463083857061
+      steps:           91
+      retries:            0
+      redos:            0
+      solver_calls_made:           91
+      solver_calls_failed:            0
+      solver_iterations:          755
