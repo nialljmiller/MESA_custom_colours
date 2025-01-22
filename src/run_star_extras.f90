@@ -384,78 +384,66 @@ module run_star_extras
 
 
 
-
-
-
-
   !###########################################################
   !## CUSTOM COLOURS
-  !########################################################### 
+  !###########################################################
 
+  SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
+    IMPLICIT NONE
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
+    INTEGER :: n
 
+    n = SIZE(wavelengths)
 
-SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
-  IMPLICIT NONE
-  REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
-  REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: interpolated_filter
-  INTEGER :: n
+    ! Allocate arrays
+    ALLOCATE(interpolated_filter(n))
+    ALLOCATE(convolved_flux(n))
 
-  n = SIZE(wavelengths)
+    ! Interpolate the filter transmission onto the wavelengths array
+    CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
 
-  ! Allocate arrays
-  ALLOCATE(interpolated_filter(n))
-  ALLOCATE(convolved_flux(n))
+    ! Perform convolution (element-wise multiplication)
+    convolved_flux = fluxes * interpolated_filter
 
-  ! Interpolate the filter transmission onto the wavelengths array
-  CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
+    ! Deallocate arrays (optional, depending on context)
+    DEALLOCATE(interpolated_filter)
+  END SUBROUTINE ConvolveSED
 
-  ! Perform convolution (element-wise multiplication)
-  convolved_flux = fluxes * interpolated_filter
-
-  ! Deallocate arrays (optional, depending on context)
-  DEALLOCATE(interpolated_filter)
-END SUBROUTINE ConvolveSED
-
-SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
+  SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
     REAL(DP), INTENT(OUT) :: synthetic_magnitude, synthetic_flux
-    INTEGER :: i    
+    INTEGER :: i
 
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
-        IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
-            PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
-            STOP
-        END IF
+      IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
+        PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+        STOP
+      END IF
     END DO
-    
+
     ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, synthetic_flux)
-    !PRINT *, "Wavelengths :", wavelengths
-    !PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
-    !PRINT *, "Integrated synthetic Flux (erg/cm2/s):", synthetic_flux
 
     ! Validate integration result
     IF (synthetic_flux <= 0.0) THEN
-        PRINT *, "Error: Flux integration resulted in non-positive value."
-        synthetic_magnitude = 99.0
-        RETURN
+      PRINT *, "Error: Flux integration resulted in non-positive value."
+      synthetic_magnitude = 99.0
+      RETURN
     END IF
 
     ! Calculate synthetic magnitude
     synthetic_magnitude = -2.5 * LOG10(synthetic_flux) + 21.1
+  END SUBROUTINE CalculateSyntheticFlux
 
-    !PRINT *, "synthetic magnitude:", synthetic_magnitude
-END SUBROUTINE CalculateSyntheticFlux
-
-
-REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
+  REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
     IMPLICIT NONE
     REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
-    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath     
+    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath
     INTEGER, INTENT(OUT) :: ierr
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
     REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: filter_wavelengths, filter_trans
@@ -470,15 +458,15 @@ REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity,
 
     ! Check for invalid gravity input
     IF (gravity <= 0.0_DP) THEN
-        ierr = 1
-        CalculateSyntheticMagnitude = -1.0_DP
-        RETURN
+      ierr = 1
+      CalculateSyntheticMagnitude = -1.0_DP
+      RETURN
     END IF
-    
+
     ! Allocate interpolated_filter if not already allocated
     IF (.NOT. ALLOCATED(interpolated_filter)) THEN
-        ALLOCATE(interpolated_filter(SIZE(wavelengths)))
-        interpolated_filter = 0.0_DP
+      ALLOCATE(interpolated_filter(SIZE(wavelengths)))
+      interpolated_filter = 0.0_DP
     END IF
 
     ! Perform SED convolution
@@ -489,45 +477,15 @@ REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity,
 
     ! Return synthetic magnitude
     IF (synthetic_flux > 0.0_DP) THEN
-        CalculateSyntheticMagnitude = synthetic_magnitude
+      CalculateSyntheticMagnitude = synthetic_magnitude
     ELSE
-        ierr = 1
-        CalculateSyntheticMagnitude = -1.0_DP
+      ierr = 1
+      CalculateSyntheticMagnitude = -1.0_DP
     END IF
 
-    ! Debugging information
-    !PRINT *, "Filter Wavelengths: "
-    !PRINT *, "  Size: ", SIZE(filter_wavelengths)
-    !PRINT *, "  Median: ", filter_wavelengths(SIZE(filter_wavelengths) / 2)
-    !PRINT *, "  Range: ", MINVAL(filter_wavelengths), " to ", MAXVAL(filter_wavelengths)
-
-    !PRINT *, "Wavelengths: "
-    !PRINT *, "  Size: ", SIZE(wavelengths)
-    !PRINT *, "  Median: ", wavelengths(SIZE(wavelengths) / 2)
-    !PRINT *, "  Range: ", MINVAL(wavelengths), " to ", MAXVAL(wavelengths)
-
-    !PRINT *, "Interpolated Filter: "
-    !PRINT *, "  Size: ", SIZE(interpolated_filter)
-    !PRINT *, "  Median: ", interpolated_filter(SIZE(interpolated_filter) / 2)
-    !PRINT *, "  Range: ", MINVAL(interpolated_filter), " to ", MAXVAL(interpolated_filter)
-
-    !PRINT *, "Fluxes: "
-    !PRINT *, "  Size: ", SIZE(fluxes)
-    !PRINT *, "  Median: ", fluxes(SIZE(fluxes) / 2)
-    !PRINT *, "  Range: ", MINVAL(fluxes), " to ", MAXVAL(fluxes)
-
-    !PRINT *, "Convolved Fluxes: "
-    !PRINT *, "  Size: ", SIZE(convolved_flux)
-    !PRINT *, "  Median: ", convolved_flux(SIZE(convolved_flux) / 2)
-    !PRINT *, "  Range: ", MINVAL(convolved_flux), " to ", MAXVAL(convolved_flux)
-    
-    print *, "  Synthetic_magnitude: ", synthetic_magnitude
-    print *, "  Synthetic Flux: ", synthetic_flux
-
-END FUNCTION CalculateSyntheticMagnitude
-
-
-
+    PRINT *, "  Synthetic_magnitude: ", synthetic_magnitude
+    PRINT *, "  Synthetic Flux: ", synthetic_flux
+  END FUNCTION CalculateSyntheticMagnitude
 
   SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
     IMPLICIT NONE
@@ -535,187 +493,177 @@ END FUNCTION CalculateSyntheticMagnitude
     CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
     REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
 
-    ! Remove INTENT for ALLOCATABLE arrays
     REAL, ALLOCATABLE :: lu_logg(:), lu_meta(:), lu_teff(:)
     CHARACTER(LEN=100), ALLOCATABLE :: file_names(:)
-
     REAL, DIMENSION(:,:), ALLOCATABLE :: lookup_table
     REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
     CHARACTER(LEN=256) :: lookup_file
 
-     lookup_file = TRIM(sed_filepath) // '/lookup_table.csv'
+    lookup_file = TRIM(sed_filepath) // '/lookup_table.csv'
 
     ! Call to load the lookup table
     CALL LoadLookupTable(lookup_file, lookup_table, file_names, lu_logg, lu_meta, lu_teff)
+
     ! Interpolate Spectral Energy Distribution
     CALL InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+
     ! Calculate bolometric flux and magnitude
     CALL CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
-
   END SUBROUTINE CalculateBolometricMagnitude
-
-
-
-
 
   !****************************
   !## LOAD LOOKUP TABLE FOR CLOSEST MATCH FOR MODEL
   !****************************
 
-
   SUBROUTINE LoadLookupTable(lookup_file, lookup_table, out_file_names, out_logg, out_meta, out_teff)
-     IMPLICIT NONE
-     CHARACTER(LEN=*), INTENT(IN) :: lookup_file
-     REAL, DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: lookup_table
-     CHARACTER(LEN=100), ALLOCATABLE, INTENT(INOUT) :: out_file_names(:)
-     REAL, ALLOCATABLE, INTENT(INOUT) :: out_logg(:), out_meta(:), out_teff(:)
+    IMPLICIT NONE
+    CHARACTER(LEN=*), INTENT(IN) :: lookup_file
+    REAL, DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: lookup_table
+    CHARACTER(LEN=100), ALLOCATABLE, INTENT(INOUT) :: out_file_names(:)
+    REAL, ALLOCATABLE, INTENT(INOUT) :: out_logg(:), out_meta(:), out_teff(:)
 
-     INTEGER :: i, n_rows, status, unit
-     CHARACTER(LEN=512) :: line
-     CHARACTER(LEN=*), PARAMETER :: delimiter = ","
-     CHARACTER(LEN=100), ALLOCATABLE :: columns(:), headers(:)
-     INTEGER :: logg_col, meta_col, teff_col
+    INTEGER :: i, n_rows, status, unit
+    CHARACTER(LEN=512) :: line
+    CHARACTER(LEN=*), PARAMETER :: delimiter = ","
+    CHARACTER(LEN=100), ALLOCATABLE :: columns(:), headers(:)
+    INTEGER :: logg_col, meta_col, teff_col
 
-     ! Open the file
-     unit = 10
-     OPEN(unit, FILE=lookup_file, STATUS='old', ACTION='read', IOSTAT=status)
-     IF (status /= 0) THEN
-        PRINT *, "Error: Could not open file", lookup_file
-        STOP
-     END IF
+    ! Open the file
+    unit = 10
+    OPEN(unit, FILE=lookup_file, STATUS='old', ACTION='read', IOSTAT=status)
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not open file", lookup_file
+      STOP
+    END IF
 
-     ! Read header line
-     READ(unit, '(A)', IOSTAT=status) line
-     IF (status /= 0) THEN
-        PRINT *, "Error: Could not read header line"
-        STOP
-     END IF
+    ! Read header line
+    READ(unit, '(A)', IOSTAT=status) line
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not read header line"
+      STOP
+    END IF
 
-     CALL SplitLine(line, delimiter, headers)
+    CALL SplitLine(line, delimiter, headers)
 
-     ! Determine column indices for logg, meta, and teff
-     logg_col = GetColumnIndex(headers, "logg")
-     meta_col = GetColumnIndex(headers, "meta")
-     teff_col = GetColumnIndex(headers, "teff")
+    ! Determine column indices for logg, meta, and teff
+    logg_col = GetColumnIndex(headers, "logg")
+    meta_col = GetColumnIndex(headers, "meta")
+    teff_col = GetColumnIndex(headers, "teff")
 
-     ! Count the number of rows in the file
-     n_rows = 0
-     DO
-        READ(unit, '(A)', IOSTAT=status) line
-        IF (status /= 0) EXIT
-        n_rows = n_rows + 1
-     END DO
-     REWIND(unit)
+    ! Count the number of rows in the file
+    n_rows = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      n_rows = n_rows + 1
+    END DO
+    REWIND(unit)
 
-     ! Skip header
-     READ(unit, '(A)', IOSTAT=status) line
+    ! Skip header
+    READ(unit, '(A)', IOSTAT=status) line
 
-     ! Allocate output arrays
-     ALLOCATE(out_file_names(n_rows))
-     ALLOCATE(out_logg(n_rows), out_meta(n_rows), out_teff(n_rows))
+    ! Allocate output arrays
+    ALLOCATE(out_file_names(n_rows))
+    ALLOCATE(out_logg(n_rows), out_meta(n_rows), out_teff(n_rows))
 
-     ! Read and parse the file
-     i = 0
-     DO
-        READ(unit, '(A)', IOSTAT=status) line
-        IF (status /= 0) EXIT
-        i = i + 1
+    ! Read and parse the file
+    i = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      i = i + 1
 
-        CALL SplitLine(line, delimiter, columns)
+      CALL SplitLine(line, delimiter, columns)
 
-        ! Populate arrays
-        out_file_names(i) = columns(1)
+      ! Populate arrays
+      out_file_names(i) = columns(1)
 
-        IF (logg_col > 0 .AND. columns(logg_col) /= "") THEN
-           READ(columns(logg_col), *) out_logg(i)
-        ELSE
-           out_logg(i) = -1.0
-        END IF
+      IF (logg_col > 0 .AND. columns(logg_col) /= "") THEN
+        READ(columns(logg_col), *) out_logg(i)
+      ELSE
+        out_logg(i) = -1.0
+      END IF
 
-        IF (meta_col > 0 .AND. columns(meta_col) /= "") THEN
-           READ(columns(meta_col), *) out_meta(i)
-        ELSE
-           out_meta(i) = -1.0
-        END IF
+      IF (meta_col > 0 .AND. columns(meta_col) /= "") THEN
+        READ(columns(meta_col), *) out_meta(i)
+      ELSE
+        out_meta(i) = -1.0
+      END IF
 
-        IF (teff_col > 0 .AND. columns(teff_col) /= "") THEN
-           READ(columns(teff_col), *) out_teff(i)
-        ELSE
-           out_teff(i) = -1.0
-        END IF
-     END DO
+      IF (teff_col > 0 .AND. columns(teff_col) /= "") THEN
+        READ(columns(teff_col), *) out_teff(i)
+      ELSE
+        out_teff(i) = -1.0
+      END IF
+    END DO
 
-     CLOSE(unit)
+    CLOSE(unit)
 
   CONTAINS
 
-     FUNCTION GetColumnIndex(headers, target) RESULT(index)
-        CHARACTER(LEN=100), INTENT(IN) :: headers(:)
-        CHARACTER(LEN=*), INTENT(IN) :: target
-        INTEGER :: index, i
-        CHARACTER(LEN=100) :: clean_header, clean_target
+    FUNCTION GetColumnIndex(headers, target) RESULT(index)
+      CHARACTER(LEN=100), INTENT(IN) :: headers(:)
+      CHARACTER(LEN=*), INTENT(IN) :: target
+      INTEGER :: index, i
+      CHARACTER(LEN=100) :: clean_header, clean_target
 
-        index = -1
-        clean_target = TRIM(ADJUSTL(target))  ! Clean the target string
+      index = -1
+      clean_target = TRIM(ADJUSTL(target))  ! Clean the target string
 
-        DO i = 1, SIZE(headers)
-           clean_header = TRIM(ADJUSTL(headers(i)))  ! Clean each header
-           IF (clean_header == clean_target) THEN
-              index = i
-              EXIT
-           END IF
-        END DO
-     END FUNCTION GetColumnIndex
-
-     SUBROUTINE SplitLine(line, delimiter, tokens)
-        CHARACTER(LEN=*), INTENT(IN) :: line, delimiter
-        CHARACTER(LEN=100), ALLOCATABLE, INTENT(OUT) :: tokens(:)
-        INTEGER :: num_tokens, pos, start, len_delim
-
-        len_delim = LEN_TRIM(delimiter)
-        start = 1
-        num_tokens = 0
-        IF (ALLOCATED(tokens)) DEALLOCATE(tokens)
-
-        DO
-           pos = INDEX(line(start:), delimiter)
-
-           IF (pos == 0) EXIT
-           num_tokens = num_tokens + 1
-           CALL AppendToken(tokens, line(start:start + pos - 2))
-           start = start + pos + len_delim - 1
-        END DO
-
-        num_tokens = num_tokens + 1
-        CALL AppendToken(tokens, line(start:))
-     END SUBROUTINE SplitLine
-
-     SUBROUTINE AppendToken(tokens, token)
-        CHARACTER(LEN=*), INTENT(IN) :: token
-        CHARACTER(LEN=100), ALLOCATABLE, INTENT(INOUT) :: tokens(:)
-        CHARACTER(LEN=100), ALLOCATABLE :: temp(:)
-        INTEGER :: n
-
-        IF (.NOT. ALLOCATED(tokens)) THEN
-           ALLOCATE(tokens(1))
-           tokens(1) = token
-        ELSE
-           n = SIZE(tokens)
-           ALLOCATE(temp(n))
-           temp = tokens  ! Backup the current tokens
-           DEALLOCATE(tokens)  ! Deallocate the old array
-           ALLOCATE(tokens(n + 1))  ! Allocate with one extra space
-           tokens(1:n) = temp  ! Restore old tokens
-           tokens(n + 1) = token  ! Add the new token
-           DEALLOCATE(temp)  ! Clean up temporary array
+      DO i = 1, SIZE(headers)
+        clean_header = TRIM(ADJUSTL(headers(i)))  ! Clean each header
+        IF (clean_header == clean_target) THEN
+          index = i
+          EXIT
         END IF
-     END SUBROUTINE AppendToken
+      END DO
+    END FUNCTION GetColumnIndex
+
+    SUBROUTINE SplitLine(line, delimiter, tokens)
+      CHARACTER(LEN=*), INTENT(IN) :: line, delimiter
+      CHARACTER(LEN=100), ALLOCATABLE, INTENT(OUT) :: tokens(:)
+      INTEGER :: num_tokens, pos, start, len_delim
+
+      len_delim = LEN_TRIM(delimiter)
+      start = 1
+      num_tokens = 0
+      IF (ALLOCATED(tokens)) DEALLOCATE(tokens)
+
+      DO
+        pos = INDEX(line(start:), delimiter)
+
+        IF (pos == 0) EXIT
+        num_tokens = num_tokens + 1
+        CALL AppendToken(tokens, line(start:start + pos - 2))
+        start = start + pos + len_delim - 1
+      END DO
+
+      num_tokens = num_tokens + 1
+      CALL AppendToken(tokens, line(start:))
+    END SUBROUTINE SplitLine
+
+    SUBROUTINE AppendToken(tokens, token)
+      CHARACTER(LEN=*), INTENT(IN) :: token
+      CHARACTER(LEN=100), ALLOCATABLE, INTENT(INOUT) :: tokens(:)
+      CHARACTER(LEN=100), ALLOCATABLE :: temp(:)
+      INTEGER :: n
+
+      IF (.NOT. ALLOCATED(tokens)) THEN
+        ALLOCATE(tokens(1))
+        tokens(1) = token
+      ELSE
+        n = SIZE(tokens)
+        ALLOCATE(temp(n))
+        temp = tokens  ! Backup the current tokens
+        DEALLOCATE(tokens)  ! Deallocate the old array
+        ALLOCATE(tokens(n + 1))  ! Allocate with one extra space
+        tokens(1:n) = temp  ! Restore old tokens
+        tokens(n + 1) = token  ! Add the new token
+        DEALLOCATE(temp)  ! Clean up temporary array
+      END IF
+    END SUBROUTINE AppendToken
 
   END SUBROUTINE LoadLookupTable
-
-
-
-
 
 
   !****************************
@@ -826,14 +774,11 @@ END FUNCTION CalculateSyntheticMagnitude
     INTEGER :: unit, n_rows, status, i
     REAL :: temp_wavelength, temp_flux
 
-    ! Generate the sed_filepath
-    !PRINT *, "Debug: Attempting to open file: ", TRIM(directory)  ! Debugging line
-
     ! Open the file
     unit = 20
     OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
     IF (status /= 0) THEN
-      PRINT *, "Error: Could not open file ", TRIM(directory)  ! Print the problematic path
+      PRINT *, "Error: Could not open file ", TRIM(directory)
       STOP
     END IF
 
@@ -844,7 +789,7 @@ END FUNCTION CalculateSyntheticMagnitude
         PRINT *, "Error: Could not read the file", TRIM(directory)
         STOP
       END IF
-      IF (line(1:1) /= "#") EXIT  ! Stop skipping once non-comment is found
+      IF (line(1:1) /= "#") EXIT
     END DO
 
     ! Count rows in the file
@@ -882,8 +827,7 @@ END FUNCTION CalculateSyntheticMagnitude
 
     CLOSE(unit)
   END SUBROUTINE LoadSED
-  
-  
+
 
   SUBROUTINE LoadFilter(directory, filter_wavelengths, filter_trans)
     IMPLICIT NONE
@@ -894,18 +838,15 @@ END FUNCTION CalculateSyntheticMagnitude
     INTEGER :: unit, n_rows, status, i
     REAL :: temp_wavelength, temp_trans
 
-    ! Generate the sed_filepath
-    !PRINT *, "Debug: Attempting to open file: ", TRIM(directory)  ! Debugging line
-
     ! Open the file
     unit = 20
     OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
     IF (status /= 0) THEN
-      PRINT *, "Error: Could not open file ", TRIM(directory)  ! Print the problematic path
+      PRINT *, "Error: Could not open file ", TRIM(directory)
       STOP
     END IF
 
-    ! Skip header line (filter file has just one line header)
+    ! Skip header line
     READ(unit, '(A)', IOSTAT=status) line
     IF (status /= 0) THEN
       PRINT *, "Error: Could not read the file", TRIM(directory)
@@ -946,16 +887,10 @@ END FUNCTION CalculateSyntheticMagnitude
     END DO
 
     CLOSE(unit)
-  END SUBROUTINE LoadFilter  
+  END SUBROUTINE LoadFilter
 
 
-
-
-
-
-
-
-SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
+  SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
     REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
@@ -963,38 +898,28 @@ SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bo
 
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
-        IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
-            PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
-            STOP
-        END IF
+      IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
+        PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+        STOP
+      END IF
     END DO
-    
+
     ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
-    !PRINT *, "Wavelengths :", wavelengths
-    !PRINT *, "Fluxes (erg/cm2/s/A):", fluxes
-    !PRINT *, "Integrated Bolometric Flux (erg/cm2/s):", bolometric_flux
 
     ! Validate integration result
     IF (bolometric_flux <= 0.0) THEN
-        PRINT *, "Error: Flux integration resulted in non-positive value."
-        bolometric_magnitude = 99.0
-        RETURN
+      PRINT *, "Error: Flux integration resulted in non-positive value."
+      bolometric_magnitude = 99.0
+      RETURN
     END IF
 
     ! Calculate bolometric magnitude
     bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 21.1
-
-    !PRINT *, "Bolometric magnitude:", bolometric_magnitude
-END SUBROUTINE CalculateBolometricFlux
+  END SUBROUTINE CalculateBolometricFlux
 
 
-  !****************************
-  !## MATHS FUNCTIONS
-  !****************************
-
-
-SUBROUTINE TrapezoidalIntegration(x, y, result)
+  SUBROUTINE TrapezoidalIntegration(x, y, result)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
     REAL(DP), INTENT(OUT) :: result
@@ -1007,131 +932,90 @@ SUBROUTINE TrapezoidalIntegration(x, y, result)
 
     ! Validate input sizes
     IF (SIZE(x) /= SIZE(y)) THEN
-        PRINT *, "Error: x and y arrays must have the same size."
-        STOP
+      PRINT *, "Error: x and y arrays must have the same size."
+      STOP
     END IF
 
     IF (SIZE(x) < 2) THEN
-        PRINT *, "Error: x and y arrays must have at least 2 elements."
-        STOP
+      PRINT *, "Error: x and y arrays must have at least 2 elements."
+      STOP
     END IF
-
-    ! Validate monotonicity of x
-    DO i = 1, n - 1
-        IF (x(i+1) <= x(i)) THEN
-            PRINT *, "Error: x array is not strictly increasing at index", i
-            STOP
-        END IF
-    END DO
-
-    ! Validate y values
-    DO i = 1, n
-        IF (y(i) /= y(i)) THEN
-            PRINT *, "Error: y array contains NaN at index", i
-            STOP
-        END IF
-
-        IF (ABS(y(i)) == HUGE(y(i))) THEN
-            PRINT *, "Error: y array contains infinity at index", i
-            STOP
-        END IF
-    END DO
 
     ! Perform trapezoidal integration
     DO i = 1, n - 1
-        !PRINT *, "x(i):", x(i), "x(i+1):", x(i+1), "y(i):", y(i), "y(i+1):", y(i+1), "Contribution:", 0.5 * (x(i+1) - x(i)) * (y(i+1) + y(i))
-        sum = sum + 0.5 * (x(i+1) - x(i)) * (y(i+1) + y(i))
+      sum = sum + 0.5 * (x(i + 1) - x(i)) * (y(i + 1) + y(i))
     END DO
 
     result = sum
-    !PRINT *, "Final integrated result:", result
-END SUBROUTINE TrapezoidalIntegration
+  END SUBROUTINE TrapezoidalIntegration
 
 
-SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
-  IMPLICIT NONE
-  REAL(DP), INTENT(IN) :: x(:), y(:), x_val
-  REAL(DP), INTENT(OUT) :: y_val
-  INTEGER :: i
-  REAL(DP) :: slope
+  SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
+    IMPLICIT NONE
+    REAL(DP), INTENT(IN) :: x(:), y(:), x_val
+    REAL(DP), INTENT(OUT) :: y_val
+    INTEGER :: i
+    REAL(DP) :: slope
 
-  
-   !PRINT *, "x size: ", SIZE(x), " y size: ", SIZE(y)
-   !PRINT *, "x_val: ", x_val
-   !PRINT *, "x: ", x
-   !PRINT *, "y: ", y
-
-  
-  ! Validate input sizes
-  IF (SIZE(x) < 2) THEN
-    PRINT *, "Error: x array has fewer than 2 points."
-    y_val = 0.0_DP
-    RETURN
-  END IF
-  IF (SIZE(x) /= SIZE(y)) THEN
-    PRINT *, "Error: x and y arrays have different sizes."
-    y_val = 0.0_DP
-    RETURN
-  END IF
-
-  ! Handle out-of-bounds cases
-  IF (x_val < MINVAL(x)) THEN
-    !PRINT *, "Warning: x_val is below the minimum x."
-    y_val = y(1)  ! Assign the first y value
-    RETURN
-  ELSE IF (x_val > MAXVAL(x)) THEN
-    !PRINT *, "Warning: x_val is above the maximum x."
-    y_val = y(SIZE(y))  ! Assign the last y value
-    RETURN
-  END IF
-
-  ! Perform interpolation
-  DO i = 1, SIZE(x) - 1
-    IF (x_val >= x(i) .AND. x_val <= x(i + 1)) THEN
-      IF (x(i + 1) == x(i)) THEN
-        PRINT *, "Warning: Duplicate x values detected."
-        y_val = y(i)  ! Assign current y value
-        RETURN
-      END IF
-      slope = (y(i + 1) - y(i)) / (x(i + 1) - x(i))
-      y_val = y(i) + slope * (x_val - x(i))
+    ! Validate input sizes
+    IF (SIZE(x) < 2) THEN
+      PRINT *, "Error: x array has fewer than 2 points."
+      y_val = 0.0_DP
       RETURN
     END IF
-  END DO
 
-  ! Default case (should not occur due to bounds check)
-  PRINT *, "Error: Unexpected case in LinearInterpolate."
-  y_val = 0.0_DP
-END SUBROUTINE LinearInterpolate
+    IF (SIZE(x) /= SIZE(y)) THEN
+      PRINT *, "Error: x and y arrays have different sizes."
+      y_val = 0.0_DP
+      RETURN
+    END IF
 
-SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
-  IMPLICIT NONE
-  REAL(DP), INTENT(IN) :: x_in(:), y_in(:), x_out(:)
-  REAL(DP), INTENT(OUT) :: y_out(:)
-  INTEGER :: i
+    ! Handle out-of-bounds cases
+    IF (x_val < MINVAL(x)) THEN
+      y_val = y(1)
+      RETURN
+    ELSE IF (x_val > MAXVAL(x)) THEN
+      y_val = y(SIZE(y))
+      RETURN
+    END IF
 
-  ! Validate input sizes
-  IF (SIZE(x_in) < 2 .OR. SIZE(y_in) < 2) THEN
-    PRINT *, "Error: x_in or y_in arrays have fewer than 2 points."
-    STOP
-  END IF
-  IF (SIZE(x_in) /= SIZE(y_in)) THEN
-    PRINT *, "Error: x_in and y_in arrays have different sizes."
-    STOP
-  END IF
-  IF (SIZE(x_out) <= 0) THEN
-    PRINT *, "Error: x_out array is empty."
-    STOP
-  END IF
+    ! Perform interpolation
+    DO i = 1, SIZE(x) - 1
+      IF (x_val >= x(i) .AND. x_val <= x(i + 1)) THEN
+        slope = (y(i + 1) - y(i)) / (x(i + 1) - x(i))
+        y_val = y(i) + slope * (x_val - x(i))
+        RETURN
+      END IF
+    END DO
 
-  ! Perform interpolation for each value in x_out
-  DO i = 1, SIZE(x_out)
-    CALL LinearInterpolate(x_in, y_in, x_out(i), y_out(i))
-  END DO
-END SUBROUTINE InterpolateArray
+    y_val = 0.0_DP
+  END SUBROUTINE LinearInterpolate
 
 
+  SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
+    IMPLICIT NONE
+    REAL(DP), INTENT(IN) :: x_in(:), y_in(:), x_out(:)
+    REAL(DP), INTENT(OUT) :: y_out(:)
+    INTEGER :: i
+
+    ! Validate input sizes
+    IF (SIZE(x_in) < 2 .OR. SIZE(y_in) < 2) THEN
+      PRINT *, "Error: x_in or y_in arrays have fewer than 2 points."
+      STOP
+    END IF
+
+    IF (SIZE(x_in) /= SIZE(y_in)) THEN
+      PRINT *, "Error: x_in and y_in arrays have different sizes."
+      STOP
+    END IF
+
+    IF (SIZE(x_out) <= 0) THEN
+      PRINT *, "Error: x_out array is empty."
+      STOP
+    END IF
+
+    DO i = 1, SIZE(x_out)
+      CALL LinearInterpolate(x_in, y_in, x_out(i), y_out(i))
+    END DO
+  END SUBROUTINE InterpolateArray
 end module run_star_extras
-
-
-
