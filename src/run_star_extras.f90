@@ -482,9 +482,15 @@ module run_star_extras
       ierr = 1
       CalculateSyntheticMagnitude = -1.0_DP
     END IF
-
+    PRINT *, "wavelengths", wavelengths
+    PRINT *, "fluxes", fluxes
+    PRINT *, "filter_wavelengths", filter_wavelengths
+    PRINT *, "filter_trans", filter_trans
+    PRINT *, "convolved_flux", convolved_flux
+    PRINT *, "interpolated_filter", interpolated_filter
     PRINT *, "  Synthetic_magnitude: ", synthetic_magnitude
     PRINT *, "  Synthetic Flux: ", synthetic_flux
+    STOP
   END FUNCTION CalculateSyntheticMagnitude
 
   SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)

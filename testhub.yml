@@ -1125,3 +1125,5 @@
       solver_calls_failed:            0
       solver_iterations:          755
     - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
+    - inlist: inlist_1.0_header
