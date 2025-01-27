@@ -58,8 +58,10 @@
     initial_mass = 1.0d0
     initial_z = 0.02d0
 
-    xa_central_lower_limit_species(1) = 'h1'
-    xa_central_lower_limit(1) = 0.1d0
+    ! xa_central_lower_limit_species(1) = 'h1'
+    ! xa_central_lower_limit(1) = 0.1d0
+
+    max_age = 13d9
 
     x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'
     x_character_ctrl(2) = 'data/filters/GAIA/GAIA'

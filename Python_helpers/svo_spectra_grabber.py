@@ -124,7 +124,7 @@ def main():
     model_index_url = "http://svo2.cab.inta-csic.es/theory/newov2/index.php"
     spectra_base_url = "http://svo2.cab.inta-csic.es/theory/newov2/ssap.php"
 
-    base_dir = "data/stellar_models/"
+    base_dir = "../data/stellar_models/"
     os.makedirs(base_dir, exist_ok=True)
 
     # Fetch model names
@@ -137,7 +137,7 @@ def main():
     session = requests.Session()  # Reuse session for efficiency
 
     for model in models:
-        fid = 1
+        fid = 0
         output_dir = os.path.join(base_dir, model)
         os.makedirs(output_dir, exist_ok=True)
         print(f"Processing model: {model}")
@@ -145,7 +145,7 @@ def main():
         lookup_table_path = os.path.join(output_dir, "lookup_table.csv")
         all_keys = set()
         metadata_rows = []
-        
+        found_spectra = 0
         while True:
             filename = f"{model}_fid{fid}.txt"
             output_fp = os.path.join(output_dir, filename)
@@ -160,6 +160,7 @@ def main():
                 fid += 1
                 continue
 
+            fid += 1
             # Query and download spectrum
             params = {"model": model, "fid": fid, "format": "ascii"}
             if download_spectrum(session, spectra_base_url, params, output_fp):
@@ -169,10 +170,16 @@ def main():
                 metadata = clean_metadata_values(metadata)  # Clean metadata values
                 metadata_rows.append(metadata)
                 all_keys.update(metadata.keys())
-                fid += 1
+                found_spectra = 1
             else:
                 print(f"No more spectra for model {model}. Last fid: {fid - 1}")
-                break
+                if found_spectra > 0:
+                    
+                    found_spectra = found_spectra + 1
+                    if found_spectra == 20:
+                        break
+    
+    
 
 
         # Write lookup table to CSV

@@ -349,7 +349,7 @@ module run_star_extras
       vals(2) = bolometric_flux 
       
 
-      print *, "################################################"
+      !print *, "################################################"
       !STOP
       ! Validate and populate values
       if (allocated(array_of_strings)) then
@@ -421,7 +421,7 @@ module run_star_extras
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
       IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
-        PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+        PRINT *, "synthetic Invalid input at index", i, ":", wavelengths(i), fluxes(i)
         STOP
       END IF
     END DO
@@ -437,7 +437,7 @@ module run_star_extras
     END IF
 
     ! Calculate synthetic magnitude
-    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) + 21.1
+    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) -48.6
   END SUBROUTINE CalculateSyntheticFlux
 
   REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
@@ -479,7 +479,7 @@ module run_star_extras
     IF (synthetic_flux > 0.0_DP) THEN
       CalculateSyntheticMagnitude = synthetic_magnitude
     ELSE
-      ierr = 1
+      !ierr = 1
       CalculateSyntheticMagnitude = -1.0_DP
     END IF
     !PRINT *, "wavelengths", wavelengths
@@ -688,6 +688,11 @@ module run_star_extras
     REAL(DP), DIMENSION(:), ALLOCATABLE :: sed1_wavelengths, sed1_flux, sed2_wavelengths, sed2_flux
     REAL(DP), DIMENSION(:), ALLOCATABLE :: sed2_flux_rescaled
     REAL :: weight1, weight2
+    REAL :: teff_weight1, teff_weight2
+    REAL :: logg_weight1, logg_weight2
+    REAL :: meta_weight1, meta_weight2
+    REAL :: total_distance1, total_distance2
+
     CHARACTER(LEN=256) :: sed_dir1, sed_dir2  ! Paths to SED files
 
     ! Get indices of the two closest stellar models
@@ -713,15 +718,36 @@ module run_star_extras
     ALLOCATE(sed2_flux_rescaled(SIZE(sed1_wavelengths)))
     CALL InterpolateArray(sed2_wavelengths, sed2_flux, sed1_wavelengths, sed2_flux_rescaled)
 
+
+    ! Calculate the differences in teff, log_g, and metallicity
+    teff_weight1 = ABS(lu_teff(closest_indices(2)) - teff) / &
+               ABS(lu_teff(closest_indices(2)) - lu_teff(closest_indices(1)))
+    teff_weight2 = 1.0 - teff_weight1
+
+    logg_weight1 = ABS(lu_logg(closest_indices(2)) - log_g) / &
+               ABS(lu_logg(closest_indices(2)) - lu_logg(closest_indices(1)))
+    logg_weight2 = 1.0 - logg_weight1
+
+    meta_weight1 = ABS(lu_meta(closest_indices(2)) - metallicity) / &
+               ABS(lu_meta(closest_indices(2)) - lu_meta(closest_indices(1)))
+    meta_weight2 = 1.0 - meta_weight1
+
+    ! Combine the weights into a total distance-based weighting
+    total_distance1 = teff_weight1 + logg_weight1 + meta_weight1
+    total_distance2 = teff_weight2 + logg_weight2 + meta_weight2
+
     ! Calculate interpolation weights based on temperature
     IF (lu_teff(closest_indices(1)) == lu_teff(closest_indices(2))) THEN
       weight1 = 0.5
       weight2 = 0.5
     ELSE
-      weight1 = ABS(lu_teff(closest_indices(2)) - teff) / &
-                ABS(lu_teff(closest_indices(2)) - lu_teff(closest_indices(1)))
-      weight2 = 1.0 - weight1
+        weight1 = total_distance1 / (total_distance1 + total_distance2)
+        weight2 = 1.0 - weight1
     END IF
+
+
+
+
 
     ! Interpolate fluxes
     ALLOCATE(wavelengths(SIZE(sed1_wavelengths)))
@@ -751,7 +777,7 @@ module run_star_extras
     ! Loop through all stellar models to find the two closest matches
     DO i = 1, n
       distance = SQRT((lu_teff(i) - teff)**2 + (lu_logg(i) - log_g)**2 + (lu_meta(i) - metallicity)**2)
-
+      
       ! Update the closest and second closest models
       IF (distance < min_distance1) THEN
         min_distance2 = min_distance1
@@ -765,8 +791,15 @@ module run_star_extras
     END DO
 
     ! Assign the closest indices to the output array
+    print *, 'Index 1:', index1, 'Index 2:', index2
+    print *, 'Index 1 distance', min_distance1, 'Index 2 distance', min_distance2
+    print *, 'MESA teff:',teff, 'model 1 teff:',lu_teff(index1),'model 2 teff:',lu_teff(index2)
+    print *, 'MESA logg:',log_g, 'model 1 logg:',lu_logg(index1), 'model 2 logg:',lu_logg(index2)
+    print *, 'MESA meta:',metallicity, 'model 1 meta:',lu_meta(index1), 'model 2 meta:',lu_meta(index2) 
+    
     closest_indices(1) = index1
     closest_indices(2) = index2
+    !stop
   END SUBROUTINE GetClosestStellarModels
 
 
@@ -827,8 +860,10 @@ module run_star_extras
       READ(unit, *, IOSTAT=status) temp_wavelength, temp_flux
       IF (status /= 0) EXIT
       i = i + 1
-      wavelengths(i) = temp_wavelength
-      flux(i) = temp_flux
+      !=======================================================================================================================================================
+      ! Convert f_lambda to f_nu
+      wavelengths(i) = temp_wavelength * 1.0e-8
+      flux(i) = temp_flux * (temp_wavelength * 1.0e-8)**2 / (2.998e10)
     END DO
 
     CLOSE(unit)
@@ -888,7 +923,8 @@ module run_star_extras
       READ(unit, *, IOSTAT=status) temp_wavelength, temp_trans
       IF (status /= 0) EXIT
       i = i + 1
-      filter_wavelengths(i) = temp_wavelength
+      
+      filter_wavelengths(i) = temp_wavelength * 1.0e-8
       filter_trans(i) = temp_trans
     END DO
 
@@ -898,17 +934,18 @@ module run_star_extras
 
   SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
     IMPLICIT NONE
-    REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
     REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
     INTEGER :: i
 
-    ! Validate inputs
+    ! Validate inputs and replace invalid wavelengths with 0
     DO i = 1, SIZE(wavelengths) - 1
       IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
-        PRINT *, "Invalid input at index", i, ":", wavelengths(i), fluxes(i)
-        STOP
+        PRINT *, "bolometric Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+        fluxes(i) = 0.0  ! Replace invalid wavelength with 0
       END IF
     END DO
+
 
     ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
