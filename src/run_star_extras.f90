@@ -347,7 +347,7 @@ module run_star_extras
 
       names(2) = "Flux_bol"
       vals(2) = bolometric_flux 
-      
+      print *, 'teff', teff, 'log_g', log_g, 'metallicity',metallicity
 
       !print *, "################################################"
       !STOP
@@ -489,7 +489,7 @@ module run_star_extras
     !PRINT *, "convolved_flux", convolved_flux
     !PRINT *, "interpolated_filter", interpolated_filter
     PRINT *, "  Synthetic_magnitude: ", synthetic_magnitude
-    PRINT *, "  Synthetic Flux: ", synthetic_flux
+    !PRINT *, "  Synthetic Flux: ", synthetic_flux
     !STOP
   END FUNCTION CalculateSyntheticMagnitude
 
@@ -670,137 +670,199 @@ module run_star_extras
     END SUBROUTINE AppendToken
 
   END SUBROUTINE LoadLookupTable
+SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
+  IMPLICIT NONE
+  REAL(8), INTENT(IN) :: teff, log_g, metallicity
+  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
+  INTEGER, DIMENSION(4), INTENT(OUT) :: closest_indices
 
+  INTEGER :: i, n, j
+  REAL :: distance, norm_teff, norm_logg, norm_meta
+  REAL, DIMENSION(:), ALLOCATABLE :: scaled_lu_teff, scaled_lu_logg, scaled_lu_meta
+  REAL, DIMENSION(4) :: min_distances
+  INTEGER, DIMENSION(4) :: indices
+  REAL :: teff_min, teff_max, logg_min, logg_max, meta_min, meta_max
 
-  !****************************
-  !## GENERATE SED FROM LOOKUP TABLE RESULTS
-  !****************************
+  n = SIZE(lu_teff)
+  min_distances = HUGE(1.0)
+  indices = -1
 
-  SUBROUTINE InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
-    IMPLICIT NONE
-    REAL(8), INTENT(IN) :: teff, log_g, metallicity
-    REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
-    CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
-    CHARACTER(LEN=100), INTENT(IN) :: file_names(:)  ! File names of stellar models
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
+  ! Find min and max for normalization
+  teff_min = MINVAL(lu_teff)
+  teff_max = MAXVAL(lu_teff)
+  logg_min = MINVAL(lu_logg)
+  logg_max = MAXVAL(lu_logg)
+  meta_min = MINVAL(lu_meta)
+  meta_max = MAXVAL(lu_meta)
 
-    INTEGER, DIMENSION(2) :: closest_indices
-    REAL(DP), DIMENSION(:), ALLOCATABLE :: sed1_wavelengths, sed1_flux, sed2_wavelengths, sed2_flux
-    REAL(DP), DIMENSION(:), ALLOCATABLE :: sed2_flux_rescaled
-    REAL :: weight1, weight2
-    REAL :: teff_weight1, teff_weight2
-    REAL :: logg_weight1, logg_weight2
-    REAL :: meta_weight1, meta_weight2
-    REAL :: total_distance1, total_distance2
+  ! Allocate and scale lookup table values
+  ALLOCATE(scaled_lu_teff(n), scaled_lu_logg(n), scaled_lu_meta(n))
 
-    CHARACTER(LEN=256) :: sed_dir1, sed_dir2  ! Paths to SED files
+  scaled_lu_teff = (lu_teff - teff_min) / (teff_max - teff_min)
+  scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
+  scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
 
-    ! Get indices of the two closest stellar models
-    CALL GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
+  ! Normalize input parameters
+  norm_teff = (teff - teff_min) / (teff_max - teff_min)
+  norm_logg = (log_g - logg_min) / (logg_max - logg_min)
+  norm_meta = (metallicity - meta_min) / (meta_max - meta_min)
 
-    ! Load the first SED
-    sed_dir1 = TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(1)))
-    CALL LoadSED(sed_dir1, closest_indices(1), sed1_wavelengths, sed1_flux)
+  ! Debug: Print normalized input parameters
+  PRINT *, "Normalized parameters for target:"
+  PRINT *, "  norm_teff = ", norm_teff, "  norm_logg = ", norm_logg, "  norm_meta = ", norm_meta
 
-    ! Load the second SED
-    sed_dir2 = TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(2)))
-    CALL LoadSED(sed_dir2, closest_indices(2), sed2_wavelengths, sed2_flux)
+  ! Find closest models
+  DO i = 1, n
+    distance = SQRT((scaled_lu_teff(i) - norm_teff)**2 + &
+                    (scaled_lu_logg(i) - norm_logg)**2 + &
+                    (scaled_lu_meta(i) - norm_meta)**2)
 
-    ! Check for a perfect match with the first SED
-    IF (lu_teff(closest_indices(1)) == teff .AND. lu_logg(closest_indices(1)) == log_g .AND. &
-        lu_meta(closest_indices(1)) == metallicity) THEN
-      wavelengths = sed1_wavelengths
-      fluxes = sed1_flux
-      RETURN
-    END IF
-
-    ! Interpolate sed2_flux onto sed1_wavelengths
-    ALLOCATE(sed2_flux_rescaled(SIZE(sed1_wavelengths)))
-    CALL InterpolateArray(sed2_wavelengths, sed2_flux, sed1_wavelengths, sed2_flux_rescaled)
-
-
-    ! Calculate the differences in teff, log_g, and metallicity
-    teff_weight1 = ABS(lu_teff(closest_indices(2)) - teff) / &
-               ABS(lu_teff(closest_indices(2)) - lu_teff(closest_indices(1)))
-    teff_weight2 = 1.0 - teff_weight1
-
-    logg_weight1 = ABS(lu_logg(closest_indices(2)) - log_g) / &
-               ABS(lu_logg(closest_indices(2)) - lu_logg(closest_indices(1)))
-    logg_weight2 = 1.0 - logg_weight1
-
-    meta_weight1 = ABS(lu_meta(closest_indices(2)) - metallicity) / &
-               ABS(lu_meta(closest_indices(2)) - lu_meta(closest_indices(1)))
-    meta_weight2 = 1.0 - meta_weight1
-
-    ! Combine the weights into a total distance-based weighting
-    total_distance1 = teff_weight1 + logg_weight1 + meta_weight1
-    total_distance2 = teff_weight2 + logg_weight2 + meta_weight2
-
-    ! Calculate interpolation weights based on temperature
-    IF (lu_teff(closest_indices(1)) == lu_teff(closest_indices(2))) THEN
-      weight1 = 0.5
-      weight2 = 0.5
-    ELSE
-        weight1 = total_distance1 / (total_distance1 + total_distance2)
-        weight2 = 1.0 - weight1
-    END IF
-
-
-
-
-
-    ! Interpolate fluxes
-    ALLOCATE(wavelengths(SIZE(sed1_wavelengths)))
-    ALLOCATE(fluxes(SIZE(sed1_flux)))
-    wavelengths = sed1_wavelengths
-    fluxes = weight1 * sed1_flux + weight2 * sed2_flux_rescaled
-
-    ! Deallocate temporary arrays
-    DEALLOCATE(sed2_flux_rescaled)
-  END SUBROUTINE InterpolateSED
-
-
-  SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
-    IMPLICIT NONE
-    REAL(8), INTENT(IN) :: teff, log_g, metallicity
-    REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
-    INTEGER, DIMENSION(2), INTENT(OUT) :: closest_indices
-
-    INTEGER :: i, n
-    REAL :: distance, min_distance1, min_distance2
-    INTEGER :: index1, index2
-
-    n = SIZE(lu_teff)
-    min_distance1 = HUGE(1.0)
-    min_distance2 = HUGE(1.0)
-
-    ! Loop through all stellar models to find the two closest matches
-    DO i = 1, n
-      distance = SQRT((lu_teff(i) - teff)**2 + (lu_logg(i) - log_g)**2 + (lu_meta(i) - metallicity)**2)
-      
-      ! Update the closest and second closest models
-      IF (distance < min_distance1) THEN
-        min_distance2 = min_distance1
-        index2 = index1
-        min_distance1 = distance
-        index1 = i
-      ELSE IF (distance < min_distance2) THEN
-        min_distance2 = distance
-        index2 = i
+    ! Check if this distance is smaller than any in the current top 4
+    DO j = 1, 4
+      IF (distance < min_distances(j)) THEN
+        ! Shift larger distances down
+        IF (j < 4) THEN
+          min_distances(j+1:4) = min_distances(j:3)
+          indices(j+1:4) = indices(j:3)
+        END IF
+        min_distances(j) = distance
+        indices(j) = i
+        EXIT
       END IF
     END DO
+  END DO
 
-    ! Assign the closest indices to the output array
-    print *, 'Index 1:', index1, 'Index 2:', index2
-    print *, 'Index 1 distance', min_distance1, 'Index 2 distance', min_distance2
-    print *, 'MESA teff:',teff, 'model 1 teff:',lu_teff(index1),'model 2 teff:',lu_teff(index2)
-    print *, 'MESA logg:',log_g, 'model 1 logg:',lu_logg(index1), 'model 2 logg:',lu_logg(index2)
-    print *, 'MESA meta:',metallicity, 'model 1 meta:',lu_meta(index1), 'model 2 meta:',lu_meta(index2) 
-    
-    closest_indices(1) = index1
-    closest_indices(2) = index2
-    !stop
-  END SUBROUTINE GetClosestStellarModels
+  closest_indices = indices
+
+  ! Debug: Print details of the closest models
+  PRINT *, "Closest models (normalized):"
+  DO j = 1, 4
+    PRINT *, "  Index = ", closest_indices(j), &
+             ", norm_teff = ", scaled_lu_teff(closest_indices(j)), &
+             ", norm_logg = ", scaled_lu_logg(closest_indices(j)), &
+             ", norm_meta = ", scaled_lu_meta(closest_indices(j)), &
+             ", Distance = ", min_distances(j)
+  END DO
+
+  ! Deallocate arrays
+  DEALLOCATE(scaled_lu_teff, scaled_lu_logg, scaled_lu_meta)
+END SUBROUTINE GetClosestStellarModels
+
+
+
+
+
+
+
+SUBROUTINE InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
+  IMPLICIT NONE
+  REAL(8), INTENT(IN) :: teff, log_g, metallicity
+  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
+  CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
+  CHARACTER(LEN=100), INTENT(IN) :: file_names(:)
+  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
+
+  INTEGER, DIMENSION(4) :: closest_indices
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux, common_wavelengths
+  REAL(DP), DIMENSION(:,:), ALLOCATABLE :: model_fluxes
+  REAL(DP), DIMENSION(4) :: weights, distances
+  INTEGER :: i
+  REAL(DP) :: sum_weights
+
+  ! Number of points in the common wavelength grid
+  INTEGER :: n_points
+
+  ! Debug print: Input parameters
+  PRINT *, "Interpolating SED for:"
+  PRINT *, "  teff = ", teff, "  log_g = ", log_g, "  metallicity = ", metallicity
+
+  ! Get the four closest stellar models
+  CALL GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
+
+  ! Debug print: Closest indices
+  PRINT *, "Closest model indices:", closest_indices
+
+  ! Load the first SED to determine the wavelength grid
+  CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(1))), closest_indices(1), &
+               temp_wavelengths, temp_flux)
+
+  ! Debug print: Loaded first SED
+  PRINT *, "First SED loaded: size = ", SIZE(temp_wavelengths)
+
+  ! Define the common wavelength grid based on the first SED
+  n_points = SIZE(temp_wavelengths)
+  ALLOCATE(common_wavelengths(n_points))
+  common_wavelengths = temp_wavelengths  ! Assume the first SED defines the grid
+
+  ! Allocate the flux array
+  ALLOCATE(model_fluxes(4, n_points))
+
+  ! Interpolate the first SED onto the common grid
+  CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(1, :))
+
+  ! Debug print: Interpolated first SED
+  PRINT *, "First SED interpolated to common grid."
+
+  ! Load and interpolate the remaining SEDs
+  DO i = 1, 4
+    CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(i))), closest_indices(i), &
+                 temp_wavelengths, temp_flux)
+
+    ! Debug print: Loaded additional SED
+    PRINT *, "SED ", i, " loaded: size = ", SIZE(temp_wavelengths)
+
+    ! Interpolate onto the common wavelength grid
+    CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(i, :))
+
+    ! Debug print: Interpolated additional SED
+    PRINT *, "SED ", i, " interpolated to common grid."
+  END DO
+
+  ! Calculate distances and weights
+  DO i = 1, 4
+    distances(i) = SQRT((lu_teff(closest_indices(i)) - teff)**2 + &
+                        (lu_logg(closest_indices(i)) - log_g)**2 + &
+                        (lu_meta(closest_indices(i)) - metallicity)**2)
+    IF (distances(i) == 0.0) distances(i) = 1.0E-10  ! Prevent division by zero
+    weights(i) = 1.0 / distances(i)
+
+    ! Debug print: Distance and weight for each model
+    PRINT *, "Model ", i, ": Distance = ", distances(i), ", Weight = ", weights(i)
+  END DO
+
+  ! Normalize weights
+  sum_weights = SUM(weights)
+  weights = weights / sum_weights
+
+  ! Debug print: Normalized weights
+  PRINT *, "Normalized weights:", weights
+
+  ! Allocate arrays for the output
+  ALLOCATE(wavelengths(n_points))
+  ALLOCATE(fluxes(n_points))
+
+  ! Assign the common wavelength grid
+  wavelengths = common_wavelengths
+
+  ! Perform weighted interpolation
+  fluxes = 0.0
+  DO i = 1, 4
+    fluxes = fluxes + weights(i) * model_fluxes(i, :)
+
+    ! Debug print: Contribution from each model
+    PRINT *, "Model ", i, " contribution to fluxes added."
+  END DO
+
+  ! Debug print: Final interpolated fluxes (first few points)
+  PRINT *, "Final interpolated fluxes (first 10 points):", fluxes(1:MIN(10, n_points))
+
+  ! Deallocate temporary arrays
+  DEALLOCATE(temp_wavelengths, temp_flux, common_wavelengths)
+
+END SUBROUTINE InterpolateSED
+
+
+
 
 
   SUBROUTINE LoadSED(directory, index, wavelengths, flux)
@@ -958,7 +1020,7 @@ module run_star_extras
     END IF
 
     ! Calculate bolometric magnitude
-    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 21.1
+    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 12.5775   !21.1
   END SUBROUTINE CalculateBolometricFlux
 
 

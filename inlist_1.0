@@ -63,7 +63,7 @@
 
     max_age = 13d9
 
-    x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'
+    x_character_ctrl(1) = 'data/stellar_models/Kurucz/'
     x_character_ctrl(2) = 'data/filters/GAIA/GAIA'
 
     photo_interval = 100
