@@ -34,11 +34,26 @@ def filter_lookup_table(input_file):
 
     print("\nAvailable parameters in the lookup table:")
     print([col for col in df.columns if col != "#file_name"])
-
+        
     filters = {}
     for column in df.columns:
         if column == "#file_name":  # Skip filtering on file names
             continue
+
+        # Gather column details
+        unique_values = df[column].unique()
+        unique_count = len(unique_values)
+        print(f"\nColumn: {column}")
+        
+        if unique_count <= 5:
+            print(f"Unique values: {unique_values}")
+        else:
+            column_range = (unique_values.min(), unique_values.max())
+            median_val = df[column].median()
+            print(f"Number of unique values: {unique_count}")
+            print(f"Range: [{column_range[0]}, {column_range[1]}], Median: {median_val}")
+
+        # Prompt the user for filter input
         print(f"Set range or value for '{column}' (e.g., 1.0-10.0 for range, 5.0 for single value, or leave blank for no filter):")
         user_input = input(f"Filter for {column}: ").strip()
 
@@ -65,9 +80,9 @@ def filter_lookup_table(input_file):
             print(f"Filtering {column} for exact value {value}...")
             df = df[df[column] == value]
 
-    if df.empty:
-        print("No rows match the specified filters. No changes made.")
-        return
+        if df.empty:
+            print("No rows match the specified filters. No changes made.")
+            return
 
     # Rename the original table
     original_backup = input_file.replace("lookup_table.csv", "OG_lookup_table.csv")
