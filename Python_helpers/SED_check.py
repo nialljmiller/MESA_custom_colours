@@ -54,7 +54,7 @@ def process_all_files(directory, xlim=None):
     # Formatting
     plt.xlabel("Wavelengths")
     plt.ylabel("Flux")
-    plt.legend()
+    #plt.legend()
     plt.title("Combined SEDs and Filters")
     plt.ticklabel_format(style='plain', useOffset=False)
 
