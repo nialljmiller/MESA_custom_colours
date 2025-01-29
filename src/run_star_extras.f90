@@ -307,87 +307,471 @@ module run_star_extras
   end subroutine read_strings_from_file
 
 
-  !FUNCTIONS FOR POPULATING MESA HISTORY FILE
+
   subroutine data_for_extra_history_columns(id, n, names, vals, ierr)
       ! Populates data for the extra history columns
       integer, intent(in) :: id, n
+      integer, intent(out) :: ierr
       character(len=maxlen_history_column_name) :: names(n)
       real(dp) :: vals(n)
-      integer, intent(out) :: ierr
       type(star_info), pointer :: s
-      integer :: i
+      integer :: i, num_strings
       character(len=100), allocatable :: array_of_strings(:)
-      integer :: num_strings
-      REAL(dp) :: teff, log_g, metallicity
-      CHARACTER(LEN=256) :: sed_filepath, filter_filepath, filter_name, filter_dir
-      REAL(DP) :: bolometric_magnitude, bolometric_flux
-      REAL(DP), DIMENSION(:), ALLOCATABLE :: wavelengths, fluxes, filter_wavelengths, filter_trans
+      real(dp) :: teff, log_g, metallicity, bolometric_magnitude, bolometric_flux
+      character(len=256) :: sed_filepath, filter_filepath, filter_name, filter_dir
+      real(dp), dimension(:), allocatable :: wavelengths, fluxes, filter_wavelengths, filter_trans
+      logical :: make_sed
+      
       ierr = 0
       call star_ptr(id, s, ierr)
       if (ierr /= 0) return
 
-      ! Input parameters
+      ! Extract input parameters
       teff = s%T(1)
       log_g = LOG10(s%grav(1))
       metallicity = s%job%extras_rpar(1)
       sed_filepath = s%x_character_ctrl(1)
-      filter_dir = s%x_character_ctrl(2)      
-
-
-      ! Populate array_of_strings
+      filter_dir = s%x_character_ctrl(2)
+      make_sed = trim(adjustl(s%x_character_ctrl(3))) == 'true'
+      
+      ! Read filters from file
       if (allocated(array_of_strings)) deallocate(array_of_strings)
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
-      !print *, array_of_strings, num_strings, id
-      !STOP
 
-      CALL CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux,wavelengths, fluxes, sed_filepath)
+      print *, "################################################"
+      
+      ! Compute bolometric values
+      CALL CalculateBolometric(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
       names(1) = "Mag_bol"
-      vals(1) = bolometric_magnitude 
-
+      vals(1) = bolometric_magnitude
       names(2) = "Flux_bol"
-      vals(2) = bolometric_flux 
-      !PRINT *, 'teff', teff, 'log_g', log_g, 'metallicity',metallicity
-
-      !print *, "################################################"
-      !STOP
-      ! Validate and populate values
+      vals(2) = bolometric_flux
+      
+      ! Populate history columns
       if (allocated(array_of_strings)) then
           do i = 3, how_many_extra_history_columns(id)
-              if (i <= num_strings+2) then
-                  filter_name = trim(remove_dat(array_of_strings(i-2)))
-              else
-                  filter_name = "Unknown"
-              end if
-
+              filter_name = "Unknown"
+              if (i <= num_strings + 2) filter_name = trim(remove_dat(array_of_strings(i - 2)))
               names(i) = filter_name
-              !PRINT *, "  Filter:", filter_name
-              ! Prepend filter name with filter dir to generate filepath
-              filter_filepath = trim(filter_dir) // "/" // array_of_strings(i-2)
-
-            if (s%T(1) >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
-                vals(i) = CalculateSyntheticMagnitude(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
-                if (ierr /= 0) vals(i) = -1.0_dp
-            else
-                vals(i) = -1.0_dp
-                ierr = 1
-            end if
-            print *, names(i), vals(i)
-            !STOP
+              filter_filepath = trim(filter_dir) // "/" // array_of_strings(i - 2)
+              
+              if (teff >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
+                  vals(i) = CalculateSynthetic(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, array_of_strings(i - 2), make_sed)
+                  if (ierr /= 0) vals(i) = -1.0_dp
+              else
+                  vals(i) = -1.0_dp
+                  ierr = 1
+              end if
+              print *, names(i), vals(i)
           end do
       else
           ierr = 1 ! Indicate an error if array_of_strings is not allocated
       end if
-
+      
       if (allocated(array_of_strings)) deallocate(array_of_strings)
   end subroutine data_for_extra_history_columns
 
 
 
 
-  !###########################################################
-  !## CUSTOM COLOURS
-  !###########################################################
+
+!###########################################################
+!## CUSTOM COLOURS
+!###########################################################
+
+!****************************
+!Calculate Bolometric Photometry Using Multiple SEDs
+!****************************
+
+  SUBROUTINE CalculateBolometric(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
+    IMPLICIT NONE
+    REAL(8), INTENT(IN) :: teff, log_g, metallicity
+    CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
+    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+
+    REAL, ALLOCATABLE :: lu_logg(:), lu_meta(:), lu_teff(:)
+    CHARACTER(LEN=100), ALLOCATABLE :: file_names(:)
+    REAL, DIMENSION(:,:), ALLOCATABLE :: lookup_table
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
+    CHARACTER(LEN=256) :: lookup_file
+
+    lookup_file = TRIM(sed_filepath) // '/lookup_table.csv'
+
+    ! Call to load the lookup table
+    CALL LoadLookupTable(lookup_file, lookup_table, file_names, lu_logg, lu_meta, lu_teff)
+    !print *, 'logg', lu_logg
+    !print *,  'meta', lu_meta
+    !print *, 'teff', lu_teff
+    ! Interpolate Spectral Energy Distribution
+    CALL ConstructSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+
+    ! Calculate bolometric flux and magnitude
+    CALL CalculateBolometricPhot(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
+  END SUBROUTINE CalculateBolometric
+
+
+
+!****************************
+!Construct SED With Combination of SEDs
+!****************************
+SUBROUTINE ConstructSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
+  IMPLICIT NONE
+  REAL(8), INTENT(IN) :: teff, log_g, metallicity
+  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
+  CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
+  CHARACTER(LEN=100), INTENT(IN) :: file_names(:)
+  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
+
+  INTEGER, DIMENSION(4) :: closest_indices
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux, common_wavelengths
+  REAL(DP), DIMENSION(:,:), ALLOCATABLE :: model_fluxes
+  REAL(DP), DIMENSION(4) :: weights, distances
+  INTEGER :: i, n_points
+  REAL(DP) :: sum_weights
+
+  ! Get the four closest stellar models
+  CALL GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
+
+  ! Load the first SED to define the wavelength grid
+  CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(1))), closest_indices(1), temp_wavelengths, temp_flux)
+  n_points = SIZE(temp_wavelengths)
+  ALLOCATE(common_wavelengths(n_points))
+  common_wavelengths = temp_wavelengths
+
+  ! Allocate flux array
+  ALLOCATE(model_fluxes(4, n_points))
+  CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(1, :))
+
+  ! Load and interpolate remaining SEDs
+  DO i = 2, 4
+    CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(i))), closest_indices(i), temp_wavelengths, temp_flux)
+    CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(i, :))
+  END DO
+
+  ! Compute distances and weights
+  DO i = 1, 4
+    distances(i) = SQRT((lu_teff(closest_indices(i)) - teff)**2 + &
+                        (lu_logg(closest_indices(i)) - log_g)**2 + &
+                        (lu_meta(closest_indices(i)) - metallicity)**2)
+    IF (distances(i) == 0.0) distances(i) = 1.0E-10  ! Prevent division by zero
+    weights(i) = 1.0 / distances(i)
+  END DO
+
+  ! Normalize weights
+  sum_weights = SUM(weights)
+  weights = weights / sum_weights
+
+
+  ! Allocate output arrays
+  ALLOCATE(wavelengths(n_points), fluxes(n_points))
+  wavelengths = common_wavelengths
+  fluxes = 0.0
+
+  ! Perform weighted interpolation
+  DO i = 1, 4
+    fluxes = fluxes + weights(i) * model_fluxes(i, :)
+  END DO
+
+  ! Deallocate temporary arrays
+  DEALLOCATE(temp_wavelengths, temp_flux, common_wavelengths)
+
+END SUBROUTINE ConstructSED
+
+
+!****************************
+!Identify The Four Closest Stellar Models
+!****************************
+
+SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
+  IMPLICIT NONE
+  REAL(8), INTENT(IN) :: teff, log_g, metallicity
+  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
+  INTEGER, DIMENSION(4), INTENT(OUT) :: closest_indices
+
+  INTEGER :: i, n, j
+  REAL(DP) :: distance, norm_teff, norm_logg, norm_meta
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: scaled_lu_teff, scaled_lu_logg, scaled_lu_meta
+  REAL(DP), DIMENSION(4) :: min_distances
+  INTEGER, DIMENSION(4) :: indices
+  REAL(DP) :: teff_min, teff_max, logg_min, logg_max, meta_min, meta_max, teff_dist, logg_dist, meta_dist
+
+  n = SIZE(lu_teff)
+  min_distances = HUGE(1.0)
+  indices = -1
+
+  ! Find min and max for normalization
+  teff_min = MINVAL(lu_teff)
+  teff_max = MAXVAL(lu_teff)
+  logg_min = MINVAL(lu_logg)
+  logg_max = MAXVAL(lu_logg)
+  meta_min = MINVAL(lu_meta)
+  meta_max = MAXVAL(lu_meta)
+
+  ! Allocate and scale lookup table values
+  ALLOCATE(scaled_lu_teff(n), scaled_lu_logg(n), scaled_lu_meta(n))
+
+  IF (teff_max - teff_min > 0.00) THEN
+    scaled_lu_teff = (lu_teff - teff_min) / (teff_max - teff_min)
+  END IF
+
+  IF (logg_max - logg_min > 0.00) THEN
+    scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
+  END IF
+
+  IF (meta_max - meta_min > 0.00) THEN    
+    scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
+  END IF
+
+  ! Normalize input parameters
+  norm_teff = (teff - teff_min) / (teff_max - teff_min)
+  norm_logg = (log_g - logg_min) / (logg_max - logg_min)
+  norm_meta = (metallicity - meta_min) / (meta_max - meta_min)
+
+  ! Debug: !PRINT normalized input parameters
+  !PRINT *, "Normalized parameters for target:"
+  PRINT *, "  teff = ", teff, "  logg = ", log_g, "  meta = ", metallicity, n
+
+  ! Find closest models
+  DO i = 1, n
+
+    teff_dist = 0.0
+    logg_dist = 0.0
+    meta_dist = 0.0
+
+    IF (teff_max - teff_min > 0.00) THEN
+      teff_dist = scaled_lu_teff(i) - norm_teff
+    END IF
+
+    IF (logg_max - logg_min > 0.00) THEN
+      logg_dist = scaled_lu_logg(i) - norm_logg
+    END IF
+
+    IF (meta_max - meta_min > 0.00) THEN    
+      meta_dist = scaled_lu_meta(i) - norm_meta
+    END IF
+
+
+    distance = SQRT(teff_dist**2 + logg_dist**2 + meta_dist**2)
+
+    ! Check if this distance is smaller than any in the current top 4
+    !PRINT *, distance
+    !PRINT *, scaled_lu_teff(i)
+    !PRINT *, norm_teff
+    !PRINT *, scaled_lu_logg(i)
+    !PRINT *, norm_logg
+    !PRINT *, scaled_lu_meta(i)
+    !PRINT *, norm_meta
+
+    DO j = 1, 4
+      IF (distance < min_distances(j)) THEN
+        ! Shift larger distances down
+        IF (j < 4) THEN
+          min_distances(j+1:4) = min_distances(j:3)
+          indices(j+1:4) = indices(j:3)
+        END IF
+        min_distances(j) = distance
+        indices(j) = i
+        EXIT
+      END IF
+    END DO
+  END DO
+
+  closest_indices = indices
+
+  ! Debug: !PRINT details of the closest models
+  !PRINT *, "Closest models (normalized):"
+  DO j = 1, 4
+    PRINT *, "  Index = ", closest_indices(j), &
+             ", teff = ", lu_teff(closest_indices(j)), &
+             ", logg = ", lu_logg(closest_indices(j)), &
+             ", meta = ", lu_meta(closest_indices(j)), &
+             ", Distance = ", min_distances(j)
+  END DO
+
+  ! Deallocate arrays
+  DEALLOCATE(scaled_lu_teff, scaled_lu_logg, scaled_lu_meta)
+END SUBROUTINE GetClosestStellarModels
+
+
+
+
+!****************************
+!Calculate Bolometric Magnitude and Flux
+!****************************
+
+  SUBROUTINE CalculateBolometricPhot(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
+    IMPLICIT NONE
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
+    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+    INTEGER :: i
+
+    ! Validate inputs and replace invalid wavelengths with 0
+    DO i = 1, SIZE(wavelengths) - 1
+      IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
+        PRINT *, "bolometric Invalid input at index", i, ":", wavelengths(i), fluxes(i)
+        fluxes(i) = 0.0  ! Replace invalid wavelength with 0
+      END IF
+    END DO
+
+
+    ! Perform trapezoidal integration
+    ! Debug: Print the first few wavelengths and flux values
+    !PRINT *, "Wavelengths (first 5):", wavelengths(1:MIN(5, SIZE(wavelengths)))
+    !PRINT *, "Fluxes (first 5):", fluxes(1:MIN(5, SIZE(fluxes)))
+
+    ! Call trapezoidal integration
+    CALL TrapezoidalIntegration(wavelengths * 1.0D-8, fluxes, bolometric_flux)
+
+    ! Debug: Check the integration result
+    !PRINT *, "Integrated Flux:", bolometric_flux
+
+    ! Validate integration result
+    IF (bolometric_flux <= 0.0) THEN
+      PRINT *, "Error: Flux integration resulted in non-positive value."
+      bolometric_magnitude = 99.0
+      RETURN
+    END IF
+
+        ! Calculate bolometric magnitude
+    IF (bolometric_flux <= 0.0) THEN
+      PRINT *, "Error: Flux integration resulted in non-positive value."
+      bolometric_magnitude = 99.0
+      RETURN
+    ELSE IF (bolometric_flux < 1.0E-10) THEN
+      PRINT *, "Warning: Flux value is very small, precision might be affected."
+    END IF
+
+    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) - 4.74
+
+  END SUBROUTINE CalculateBolometricPhot
+
+
+
+
+
+
+
+
+
+
+
+
+!###########################################################
+!## Synthetic Photometry
+!###########################################################
+
+!****************************
+!Calculate Synthetic Photometry Using SED and Filter
+!****************************
+
+REAL(DP) FUNCTION CalculateSynthetic(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, filter_name, make_sed)
+    IMPLICIT NONE
+
+    ! Input arguments
+    REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
+    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath, filter_name
+    INTEGER, INTENT(OUT) :: ierr
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: filter_wavelengths, filter_trans
+    LOGICAL, INTENT(IN) :: make_sed
+    ! Local variables
+    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux, interpolated_filter
+    CHARACTER(LEN=1000) :: line
+    CHARACTER(LEN=100) :: csv_file
+    REAL(DP) :: synthetic_magnitude, synthetic_flux
+    INTEGER :: max_size, i
+    REAL(DP) :: magnitude
+    REAL(DP) :: wv, fl, cf, fwv, ftr
+
+
+    csv_file =  'LOGS/SED/' //TRIM(remove_dat(filter_name)) // '_SED.csv'
+    ! Initialize error flag
+    ierr = 0
+
+    ! Load filter data
+    CALL LoadFilter(filter_filepath, filter_wavelengths, filter_trans)
+
+    ! Check for invalid gravity input
+    IF (gravity <= 0.0_DP) THEN
+        ierr = 1
+        CalculateSynthetic = -1.0_DP
+        RETURN
+    END IF
+
+    ! Allocate interpolated_filter if not already allocated
+    IF (.NOT. ALLOCATED(interpolated_filter)) THEN
+        ALLOCATE(interpolated_filter(SIZE(wavelengths)))
+        interpolated_filter = 0.0_DP
+    END IF
+
+    ! Perform SED convolution
+    CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
+
+  IF (make_sed) THEN
+! Determine the maximum size among all arrays
+max_size = MAX(SIZE(wavelengths), SIZE(filter_wavelengths), SIZE(fluxes), SIZE(convolved_flux), SIZE(filter_trans))
+
+! Open the CSV file for writing
+OPEN(UNIT=10, FILE=csv_file, STATUS='REPLACE', ACTION='WRITE', IOSTAT=ierr)
+IF (ierr /= 0) THEN
+    PRINT *, "Error opening file for writing"
+    STOP
+END IF
+
+! Write headers to the CSV file
+WRITE(10, '(A)') "wavelengths,fluxes,convolved_flux,filter_wavelengths,filter_trans"
+
+! Loop through data and safely write values, ensuring no out-of-bounds errors
+DO i = 1, max_size
+    ! Initialize values to zero in case they are out of bounds
+    wv = 0.0_DP
+    fl = 0.0_DP
+    cf = 0.0_DP
+    fwv = 0.0_DP
+    ftr = 0.0_DP
+
+    ! Assign actual values only if within valid indices
+    IF (i <= SIZE(wavelengths)) wv = wavelengths(i)
+    IF (i <= SIZE(fluxes)) fl = fluxes(i)
+    IF (i <= SIZE(convolved_flux)) cf = convolved_flux(i)
+    IF (i <= SIZE(filter_wavelengths)) fwv = filter_wavelengths(i)
+    IF (i <= SIZE(filter_trans)) ftr = filter_trans(i)
+
+    ! Write the formatted output
+    WRITE(line, '(ES14.6, ",", ES14.6, ",", ES14.6, ",", ES14.6, ",", ES14.6)') &
+        wv, fl, cf, fwv, ftr
+    WRITE(10, '(A)') TRIM(line)
+END DO
+
+! Close the file
+CLOSE(10)
+
+  END IF
+
+    ! Inform the user of successful writing
+    !PRINT *, "Data written to ", csv_file
+
+    ! Calculate synthetic flux and magnitude
+    CALL CalculateSyntheticPhot(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux)
+
+    ! Calculate and return the synthetic magnitude
+    IF (synthetic_flux > 0.0_DP) THEN
+        magnitude = synthetic_magnitude
+    ELSE
+        magnitude = -1.0_DP
+    END IF
+    !print *, magnitude
+    CalculateSynthetic = magnitude
+END FUNCTION CalculateSynthetic
+
+
+
+
+
+!****************************
+!Convolve SED With Filter
+!****************************
 
   SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
     IMPLICIT NONE
@@ -413,11 +797,17 @@ module run_star_extras
     DEALLOCATE(interpolated_filter)
   END SUBROUTINE ConvolveSED
 
-  SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
+
+
+!****************************
+!Calculate Synthetic Flux and Magnitude
+!****************************
+  SUBROUTINE CalculateSyntheticPhot(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
     REAL(DP), INTENT(OUT) :: synthetic_magnitude, synthetic_flux
     INTEGER :: i
+    REAL(DP) :: integrated_flux
 
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
@@ -427,151 +817,200 @@ module run_star_extras
       END IF
     END DO
 
-    ! Perform trapezoidal integration
-    CALL TrapezoidalIntegration(wavelengths, fluxes, synthetic_flux)
-    !print *, wavelengths
-    !print *, fluxes
+    ! Convert wavelengths from Angstroms to cm
+    ! 1 Å = 1e-8 cm
+    CALL TrapezoidalIntegration(wavelengths * 1.0D-8, fluxes, integrated_flux)
+
     ! Validate integration result
-    IF (synthetic_flux <= 0.0) THEN
+    IF (integrated_flux <= 0.0) THEN
       PRINT *, "Error: Flux integration resulted in non-positive value."
       synthetic_magnitude = 99.0
       RETURN
     END IF
 
+    ! Store the total flux
+    synthetic_flux = integrated_flux
 
-    ! Calculate synthetic magnitude
-    !print *, synthetic_flux
-    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) - 4.74!48.6
-    !print *, synthetic_magnitude
+    ! Calculate synthetic magnitude using the standard bolometric zero point
+    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) - 4.74
 
-  END SUBROUTINE CalculateSyntheticFlux
-
-
+  END SUBROUTINE CalculateSyntheticPhot
 
 
 
 
 
+  
 
 
-REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath)
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+!###########################################################
+!## FILE IO
+!###########################################################
+
+!****************************
+!Load SED File
+!****************************
+
+  SUBROUTINE LoadSED(directory, index, wavelengths, flux)
     IMPLICIT NONE
+    CHARACTER(LEN=*), INTENT(IN) :: directory
+    INTEGER, INTENT(IN) :: index
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
 
-    ! Input arguments
-    REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
-    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath
-    INTEGER, INTENT(OUT) :: ierr
-    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: filter_wavelengths, filter_trans
+    CHARACTER(LEN=512) :: line
+    INTEGER :: unit, n_rows, status, i
+    REAL :: temp_wavelength, temp_flux
 
-    ! Local variables
-    REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux, interpolated_filter
-    CHARACTER(LEN=100) :: line
-    CHARACTER(LEN=*), PARAMETER :: csv_file = 'output.csv'
-    REAL(DP) :: synthetic_magnitude, synthetic_flux
-    INTEGER :: max_size, i
-    REAL(DP) :: magnitude
-
-    ! Initialize error flag
-    ierr = 0
-
-    ! Load filter data
-    CALL LoadFilter(filter_filepath, filter_wavelengths, filter_trans)
-
-    ! Check for invalid gravity input
-    IF (gravity <= 0.0_DP) THEN
-        ierr = 1
-        CalculateSyntheticMagnitude = -1.0_DP
-        RETURN
+    ! Open the file
+    unit = 20
+    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not open file ", TRIM(directory)
+      STOP
     END IF
 
-    ! Allocate interpolated_filter if not already allocated
-    IF (.NOT. ALLOCATED(interpolated_filter)) THEN
-        ALLOCATE(interpolated_filter(SIZE(wavelengths)))
-        interpolated_filter = 0.0_DP
-    END IF
-
-    ! Perform SED convolution
-    CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
-
-
-    ! Open the CSV file for writing
-    OPEN(UNIT=10, FILE=csv_file, STATUS='REPLACE', ACTION='WRITE', IOSTAT=ierr)
-    IF (ierr /= 0) THEN
-        PRINT *, "Error opening file for writing"
+    ! Skip header lines
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not read the file", TRIM(directory)
         STOP
-    END IF
-
-    ! Write headers to the CSV file
-    WRITE(10, '(A)') "wavelengths,fluxes,convolved_flux"
-
-    ! Loop through data and write each row
-    DO i = 1, SIZE(wavelengths)
-        IF (i <= SIZE(filter_wavelengths)) THEN
-            WRITE(line, '(ES14.6, ",", ES14.6, ",",  ES14.6)') &
-                wavelengths(i), fluxes(i), convolved_flux(i)
-        ELSE
-            WRITE(line, '(ES14.6, ",", ES14.6, ",", ES14.6)') &
-                wavelengths(i), fluxes(i), convolved_flux(i)
-        END IF
-        WRITE(10, '(A)') TRIM(line)
+      END IF
+      IF (line(1:1) /= "#") EXIT
     END DO
 
-    ! Close the file
-    CLOSE(10)
+    ! Count rows in the file
+    n_rows = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      n_rows = n_rows + 1
+    END DO
 
-    ! Inform the user of successful writing
-    !PRINT *, "Data written to ", csv_file
+    ! Allocate arrays
+    ALLOCATE(wavelengths(n_rows))
+    ALLOCATE(flux(n_rows))
 
-    ! Calculate synthetic flux and magnitude
-    CALL CalculateSyntheticFlux(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux)
+    ! Rewind to the first non-comment line
+    REWIND(unit)
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not rewind file", TRIM(directory)
+        STOP
+      END IF
+      IF (line(1:1) /= "#") EXIT
+    END DO
 
-    ! Calculate and return the synthetic magnitude
-    IF (synthetic_flux > 0.0_DP) THEN
-        magnitude = synthetic_magnitude
-    ELSE
-        magnitude = -1.0_DP
-    END IF
-    !print *, magnitude
-    CalculateSyntheticMagnitude = magnitude
-END FUNCTION CalculateSyntheticMagnitude
+    ! Read and parse data
+    i = 0
+    DO
+      READ(unit, *, IOSTAT=status) temp_wavelength, temp_flux
+      IF (status /= 0) EXIT
+      i = i + 1
+      ! Convert f_lambda to f_nu
+      wavelengths(i) = temp_wavelength * 1.0e-8
+      flux(i) = temp_flux !* (temp_wavelength * 1.0e-8)**2 / (2.998e10)
+    END DO
+
+    CLOSE(unit)
+  END SUBROUTINE LoadSED
 
 
 
+!****************************
+!Load Filter File
+!****************************
 
-  SUBROUTINE CalculateBolometricMagnitude(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
+  SUBROUTINE LoadFilter(directory, filter_wavelengths, filter_trans)
     IMPLICIT NONE
-    REAL(8), INTENT(IN) :: teff, log_g, metallicity
-    CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
-    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
+    CHARACTER(LEN=*), INTENT(IN) :: directory
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: filter_wavelengths, filter_trans
 
-    REAL, ALLOCATABLE :: lu_logg(:), lu_meta(:), lu_teff(:)
-    CHARACTER(LEN=100), ALLOCATABLE :: file_names(:)
-    REAL, DIMENSION(:,:), ALLOCATABLE :: lookup_table
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
-    CHARACTER(LEN=256) :: lookup_file
+    CHARACTER(LEN=512) :: line
+    INTEGER :: unit, n_rows, status, i
+    REAL :: temp_wavelength, temp_trans
 
-    lookup_file = TRIM(sed_filepath) // '/lookup_table.csv'
+    ! Open the file
+    unit = 20
+    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not open file ", TRIM(directory)
+      STOP
+    END IF
 
-    ! Call to load the lookup table
-    CALL LoadLookupTable(lookup_file, lookup_table, file_names, lu_logg, lu_meta, lu_teff)
-    !print *, 'logg', lu_logg
-    !print *,  'meta', lu_meta
-    !print *, 'teff', lu_teff
-    ! Interpolate Spectral Energy Distribution
-    CALL InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+    ! Skip header line
+    READ(unit, '(A)', IOSTAT=status) line
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not read the file", TRIM(directory)
+      STOP
+    END IF
 
-    ! Calculate bolometric flux and magnitude
-    CALL CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
-  END SUBROUTINE CalculateBolometricMagnitude
+    ! Count rows in the file
+    n_rows = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      n_rows = n_rows + 1
+    END DO
+
+    ! Allocate arrays
+    ALLOCATE(filter_wavelengths(n_rows))
+    ALLOCATE(filter_trans(n_rows))
+
+    ! Rewind to the first non-comment line
+    REWIND(unit)
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not rewind file", TRIM(directory)
+        STOP
+      END IF
+      IF (line(1:1) /= "#") EXIT
+    END DO
+
+    ! Read and parse data
+    i = 0
+    DO
+      READ(unit, *, IOSTAT=status) temp_wavelength, temp_trans
+      IF (status /= 0) EXIT
+      i = i + 1
+      
+      filter_wavelengths(i) = temp_wavelength * 1.0e-8
+      filter_trans(i) = temp_trans
+    END DO
+
+    CLOSE(unit)
+  END SUBROUTINE LoadFilter
 
 
 
 
 
-  !****************************
-  !## LOAD LOOKUP TABLE FOR CLOSEST MATCH FOR MODEL
-  !****************************
+
+!****************************
+!Load Lookup Table For Identifying Stellar Atmosphere Models
+!****************************
+
 
   SUBROUTINE LoadLookupTable(lookup_file, lookup_table, out_file_names, out_logg, out_meta, out_teff)
     IMPLICIT NONE
@@ -737,402 +1176,24 @@ END FUNCTION CalculateSyntheticMagnitude
 
   END SUBROUTINE LoadLookupTable
   
-  
-SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
-  IMPLICIT NONE
-  REAL(8), INTENT(IN) :: teff, log_g, metallicity
-  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
-  INTEGER, DIMENSION(4), INTENT(OUT) :: closest_indices
 
-  INTEGER :: i, n, j
-  REAL(DP) :: distance, norm_teff, norm_logg, norm_meta
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: scaled_lu_teff, scaled_lu_logg, scaled_lu_meta
-  REAL(DP), DIMENSION(4) :: min_distances
-  INTEGER, DIMENSION(4) :: indices
-  REAL(DP) :: teff_min, teff_max, logg_min, logg_max, meta_min, meta_max, teff_dist, logg_dist, meta_dist
 
-  n = SIZE(lu_teff)
-  min_distances = HUGE(1.0)
-  indices = -1
 
-  ! Find min and max for normalization
-  teff_min = MINVAL(lu_teff)
-  teff_max = MAXVAL(lu_teff)
-  logg_min = MINVAL(lu_logg)
-  logg_max = MAXVAL(lu_logg)
-  meta_min = MINVAL(lu_meta)
-  meta_max = MAXVAL(lu_meta)
 
-  ! Allocate and scale lookup table values
-  ALLOCATE(scaled_lu_teff(n), scaled_lu_logg(n), scaled_lu_meta(n))
 
-  IF (teff_max - teff_min > 0.00) THEN
-    scaled_lu_teff = (lu_teff - teff_min) / (teff_max - teff_min)
-  END IF
 
-  IF (logg_max - logg_min > 0.00) THEN
-    scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
-  END IF
 
-  IF (meta_max - meta_min > 0.00) THEN    
-    scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
-  END IF
 
-  ! Normalize input parameters
-  norm_teff = (teff - teff_min) / (teff_max - teff_min)
-  norm_logg = (log_g - logg_min) / (logg_max - logg_min)
-  norm_meta = (metallicity - meta_min) / (meta_max - meta_min)
 
-  ! Debug: !PRINT normalized input parameters
-  !PRINT *, "Normalized parameters for target:"
-  PRINT *, "  teff = ", teff, "  logg = ", log_g, "  meta = ", metallicity, n
 
-  ! Find closest models
-  DO i = 1, n
 
-    teff_dist = 0.0
-    logg_dist = 0.0
-    meta_dist = 0.0
+  !###########################################################
+  !## MATHS
+  !###########################################################
 
-    IF (teff_max - teff_min > 0.00) THEN
-      teff_dist = scaled_lu_teff(i) - norm_teff
-    END IF
-
-    IF (logg_max - logg_min > 0.00) THEN
-      logg_dist = scaled_lu_logg(i) - norm_logg
-    END IF
-
-    IF (meta_max - meta_min > 0.00) THEN    
-      meta_dist = scaled_lu_meta(i) - norm_meta
-    END IF
-
-
-    distance = SQRT(teff_dist**2 + logg_dist**2 + meta_dist**2)
-
-    ! Check if this distance is smaller than any in the current top 4
-    !PRINT *, distance
-    !PRINT *, scaled_lu_teff(i)
-    !PRINT *, norm_teff
-    !PRINT *, scaled_lu_logg(i)
-    !PRINT *, norm_logg
-    !PRINT *, scaled_lu_meta(i)
-    !PRINT *, norm_meta
-
-    DO j = 1, 4
-      IF (distance < min_distances(j)) THEN
-        ! Shift larger distances down
-        IF (j < 4) THEN
-          min_distances(j+1:4) = min_distances(j:3)
-          indices(j+1:4) = indices(j:3)
-        END IF
-        min_distances(j) = distance
-        indices(j) = i
-        EXIT
-      END IF
-    END DO
-  END DO
-
-  closest_indices = indices
-
-  ! Debug: !PRINT details of the closest models
-  !PRINT *, "Closest models (normalized):"
-  DO j = 1, 4
-    PRINT *, "  Index = ", closest_indices(j), &
-             ", teff = ", lu_teff(closest_indices(j)), &
-             ", logg = ", lu_logg(closest_indices(j)), &
-             ", meta = ", lu_meta(closest_indices(j)), &
-             ", Distance = ", min_distances(j)
-  END DO
-
-  ! Deallocate arrays
-  DEALLOCATE(scaled_lu_teff, scaled_lu_logg, scaled_lu_meta)
-END SUBROUTINE GetClosestStellarModels
-
-
-
-
-
-SUBROUTINE InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
-  IMPLICIT NONE
-  REAL(8), INTENT(IN) :: teff, log_g, metallicity
-  REAL, INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
-  CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
-  CHARACTER(LEN=100), INTENT(IN) :: file_names(:)
-  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
-
-  INTEGER, DIMENSION(4) :: closest_indices
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux, common_wavelengths
-  REAL(DP), DIMENSION(:,:), ALLOCATABLE :: model_fluxes
-  REAL(DP), DIMENSION(4) :: weights, distances
-  INTEGER :: i
-  REAL(DP) :: sum_weights
-
-  ! Number of points in the common wavelength grid
-  INTEGER :: n_points
-
-  ! Debug !PRINT: Input parameters
-  !PRINT *, "Interpolating SED for:"
-  !PRINT *, "  teff = ", teff, "  log_g = ", log_g, "  metallicity = ", metallicity
-
-  ! Get the four closest stellar models
-  CALL GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
-
-  ! Debug !PRINT: Closest indices
-  !PRINT *, "Closest model indices:", closest_indices
-
-  ! Load the first SED to determine the wavelength grid
-  CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(1))), closest_indices(1), &
-               temp_wavelengths, temp_flux)
-
-  ! Debug !PRINT: Loaded first SED
-  !PRINT *, "First SED loaded: size = ", SIZE(temp_wavelengths)
-
-  ! Define the common wavelength grid based on the first SED
-  n_points = SIZE(temp_wavelengths)
-  ALLOCATE(common_wavelengths(n_points))
-  common_wavelengths = temp_wavelengths  ! Assume the first SED defines the grid
-
-  ! Allocate the flux array
-  ALLOCATE(model_fluxes(4, n_points))
-
-  ! Interpolate the first SED onto the common grid
-  CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(1, :))
-
-  ! Debug !PRINT: Interpolated first SED
-  !PRINT *, "First SED interpolated to common grid."
-
-  ! Load and interpolate the remaining SEDs
-  DO i = 1, 4
-    CALL LoadSED(TRIM(stellar_model_dir) // TRIM(file_names(closest_indices(i))), closest_indices(i), &
-                 temp_wavelengths, temp_flux)
-
-    ! Debug !PRINT: Loaded additional SED
-    !PRINT *, "SED ", i, " loaded: size = ", SIZE(temp_wavelengths)
-
-    ! Interpolate onto the common wavelength grid
-    CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, model_fluxes(i, :))
-
-    ! Debug !PRINT: Interpolated additional SED
-    !PRINT *, "SED ", i, " interpolated to common grid."
-  END DO
-
-  ! Calculate distances and weights
-  DO i = 1, 4
-    distances(i) = SQRT((lu_teff(closest_indices(i)) - teff)**2 + &
-                        (lu_logg(closest_indices(i)) - log_g)**2 + &
-                        (lu_meta(closest_indices(i)) - metallicity)**2)
-    IF (distances(i) == 0.0) distances(i) = 1.0E-10  ! Prevent division by zero
-    weights(i) = 1.0 / distances(i)
-
-    ! Debug !PRINT: Distance and weight for each model
-  END DO
-
-  ! Normalize weights
-  sum_weights = SUM(weights)
-  weights = weights / sum_weights
-
-  DO i = 1, 4
-    PRINT *, "Model ", i, ": Distance = ", distances(i), ", Weight = ", weights(i)
-  END DO
-
-  ! Debug !PRINT: Normalized weights
-  !PRINT *, "Normalized weights:", weights
-
-  ! Allocate arrays for the output
-  ALLOCATE(wavelengths(n_points))
-  ALLOCATE(fluxes(n_points))
-
-  ! Assign the common wavelength grid
-  wavelengths = common_wavelengths
-
-  ! Perform weighted interpolation
-  fluxes = 0.0
-  DO i = 1, 4
-    fluxes = fluxes + weights(i) * model_fluxes(i, :)
-
-    ! Debug !PRINT: Contribution from each model
-    !PRINT *, "Model ", i, " contribution to fluxes added."
-  END DO
-
-  ! Debug !PRINT: Final interpolated fluxes (first few points)
-  !PRINT *, "Final interpolated fluxes (first 10 points):", fluxes(1:MIN(10, n_points))
-
-  ! Deallocate temporary arrays
-  DEALLOCATE(temp_wavelengths, temp_flux, common_wavelengths)
-
-END SUBROUTINE InterpolateSED
-
-
-
-
-
-  SUBROUTINE LoadSED(directory, index, wavelengths, flux)
-    IMPLICIT NONE
-    CHARACTER(LEN=*), INTENT(IN) :: directory
-    INTEGER, INTENT(IN) :: index
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
-
-    CHARACTER(LEN=512) :: line
-    INTEGER :: unit, n_rows, status, i
-    REAL :: temp_wavelength, temp_flux
-
-    ! Open the file
-    unit = 20
-    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
-    IF (status /= 0) THEN
-      PRINT *, "Error: Could not open file ", TRIM(directory)
-      STOP
-    END IF
-
-    ! Skip header lines
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) THEN
-        PRINT *, "Error: Could not read the file", TRIM(directory)
-        STOP
-      END IF
-      IF (line(1:1) /= "#") EXIT
-    END DO
-
-    ! Count rows in the file
-    n_rows = 0
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) EXIT
-      n_rows = n_rows + 1
-    END DO
-
-    ! Allocate arrays
-    ALLOCATE(wavelengths(n_rows))
-    ALLOCATE(flux(n_rows))
-
-    ! Rewind to the first non-comment line
-    REWIND(unit)
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) THEN
-        PRINT *, "Error: Could not rewind file", TRIM(directory)
-        STOP
-      END IF
-      IF (line(1:1) /= "#") EXIT
-    END DO
-
-    ! Read and parse data
-    i = 0
-    DO
-      READ(unit, *, IOSTAT=status) temp_wavelength, temp_flux
-      IF (status /= 0) EXIT
-      i = i + 1
-      !=======================================================================================================================================================
-      ! Convert f_lambda to f_nu
-      wavelengths(i) = temp_wavelength * 1.0e-10
-      flux(i) = temp_flux !* (temp_wavelength * 1.0e-8)**2 / (2.998e10)
-    END DO
-
-    CLOSE(unit)
-  END SUBROUTINE LoadSED
-
-
-  SUBROUTINE LoadFilter(directory, filter_wavelengths, filter_trans)
-    IMPLICIT NONE
-    CHARACTER(LEN=*), INTENT(IN) :: directory
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: filter_wavelengths, filter_trans
-
-    CHARACTER(LEN=512) :: line
-    INTEGER :: unit, n_rows, status, i
-    REAL :: temp_wavelength, temp_trans
-
-    ! Open the file
-    unit = 20
-    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
-    IF (status /= 0) THEN
-      PRINT *, "Error: Could not open file ", TRIM(directory)
-      STOP
-    END IF
-
-    ! Skip header line
-    READ(unit, '(A)', IOSTAT=status) line
-    IF (status /= 0) THEN
-      PRINT *, "Error: Could not read the file", TRIM(directory)
-      STOP
-    END IF
-
-    ! Count rows in the file
-    n_rows = 0
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) EXIT
-      n_rows = n_rows + 1
-    END DO
-
-    ! Allocate arrays
-    ALLOCATE(filter_wavelengths(n_rows))
-    ALLOCATE(filter_trans(n_rows))
-
-    ! Rewind to the first non-comment line
-    REWIND(unit)
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) THEN
-        PRINT *, "Error: Could not rewind file", TRIM(directory)
-        STOP
-      END IF
-      IF (line(1:1) /= "#") EXIT
-    END DO
-
-    ! Read and parse data
-    i = 0
-    DO
-      READ(unit, *, IOSTAT=status) temp_wavelength, temp_trans
-      IF (status /= 0) EXIT
-      i = i + 1
-      
-      filter_wavelengths(i) = temp_wavelength * 1.0e-10
-      filter_trans(i) = temp_trans
-    END DO
-
-    CLOSE(unit)
-  END SUBROUTINE LoadFilter
-
-
-  SUBROUTINE CalculateBolometricFlux(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
-    IMPLICIT NONE
-    REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
-    REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
-    INTEGER :: i
-
-    ! Validate inputs and replace invalid wavelengths with 0
-    DO i = 1, SIZE(wavelengths) - 1
-      IF (wavelengths(i) <= 0.0 .OR. fluxes(i) < 0.0) THEN
-        PRINT *, "bolometric Invalid input at index", i, ":", wavelengths(i), fluxes(i)
-        fluxes(i) = 0.0  ! Replace invalid wavelength with 0
-      END IF
-    END DO
-
-
-    ! Perform trapezoidal integration
-    CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
-
-    ! Validate integration result
-    IF (bolometric_flux <= 0.0) THEN
-      PRINT *, "Error: Flux integration resulted in non-positive value."
-      bolometric_magnitude = 99.0
-      RETURN
-    END IF
-
-        ! Calculate bolometric magnitude
-    IF (bolometric_flux <= 0.0) THEN
-      PRINT *, "Error: Flux integration resulted in non-positive value."
-      bolometric_magnitude = 99.0
-      RETURN
-    ELSE IF (bolometric_flux < 1.0E-10) THEN
-      PRINT *, "Warning: Flux value is very small, precision might be affected."
-    END IF
-
-    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) + 12.5775
-
-  END SUBROUTINE CalculateBolometricFlux
-
+!****************************
+!Trapezoidal Integration For Flux Calculation
+!****************************
 
   SUBROUTINE TrapezoidalIntegration(x, y, result)
     IMPLICIT NONE
@@ -1164,6 +1225,11 @@ END SUBROUTINE InterpolateSED
     result = sum
   END SUBROUTINE TrapezoidalIntegration
 
+
+
+!****************************
+!Linear Interpolation For SED Construction
+!****************************
 
   SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
     IMPLICIT NONE
@@ -1206,6 +1272,10 @@ END SUBROUTINE InterpolateSED
     y_val = 0.0_DP
   END SUBROUTINE LinearInterpolate
 
+
+!****************************
+!Array Interpolation For SED Construction
+!****************************
 
   SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
     IMPLICIT NONE
