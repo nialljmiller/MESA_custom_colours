@@ -375,7 +375,6 @@ module run_star_extras
 
 
 
-
 !###########################################################
 !## CUSTOM COLOURS
 !###########################################################
@@ -621,7 +620,7 @@ END SUBROUTINE GetClosestStellarModels
     !PRINT *, "Fluxes (first 5):", fluxes(1:MIN(5, SIZE(fluxes)))
 
     ! Call trapezoidal integration
-    CALL TrapezoidalIntegration(wavelengths * 1.0D-8, fluxes, bolometric_flux)
+    CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
 
     ! Debug: Check the integration result
     !PRINT *, "Integrated Flux:", bolometric_flux
@@ -642,7 +641,7 @@ END SUBROUTINE GetClosestStellarModels
       PRINT *, "Warning: Flux value is very small, precision might be affected."
     END IF
 
-    bolometric_magnitude = -2.5 * LOG10(bolometric_flux) - 4.74
+  bolometric_magnitude = FluxToMagnitude(bolometric_flux)
 
   END SUBROUTINE CalculateBolometricPhot
 
@@ -817,9 +816,7 @@ END FUNCTION CalculateSynthetic
       END IF
     END DO
 
-    ! Convert wavelengths from Angstroms to cm
-    ! 1 Å = 1e-8 cm
-    CALL TrapezoidalIntegration(wavelengths * 1.0D-8, fluxes, integrated_flux)
+    CALL TrapezoidalIntegration(wavelengths, fluxes, integrated_flux)
 
     ! Validate integration result
     IF (integrated_flux <= 0.0) THEN
@@ -832,7 +829,7 @@ END FUNCTION CalculateSynthetic
     synthetic_flux = integrated_flux
 
     ! Calculate synthetic magnitude using the standard bolometric zero point
-    synthetic_magnitude = -2.5 * LOG10(synthetic_flux) - 4.74
+    synthetic_magnitude = FluxToMagnitude(synthetic_flux)
 
   END SUBROUTINE CalculateSyntheticPhot
 
@@ -1190,6 +1187,28 @@ END FUNCTION CalculateSynthetic
   !###########################################################
   !## MATHS
   !###########################################################
+
+
+!****************************
+!Trapezoidal Integration For Flux Calculation
+!****************************
+
+  REAL(DP) FUNCTION FluxToMagnitude(flux)
+    IMPLICIT NONE
+    REAL(DP), INTENT(IN) :: flux
+    print *, 'flux:', flux
+    IF (flux <= 0.0) THEN
+      PRINT *, "Error: Flux must be positive to calculate magnitude."
+      FluxToMagnitude = 99.0  ! Return an error value
+    ELSE
+      FluxToMagnitude = -2.5 * LOG10(flux) - 4.74
+    END IF
+  END FUNCTION FluxToMagnitude
+
+
+
+
+
 
 !****************************
 !Trapezoidal Integration For Flux Calculation
