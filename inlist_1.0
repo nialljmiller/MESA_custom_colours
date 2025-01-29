@@ -63,7 +63,8 @@
 
     max_age = 13d9
 
-    x_character_ctrl(1) = 'data/stellar_models/Kurucz/'
+    x_character_ctrl(1) = 'data/stellar_models/bbody/'   
+    !x_character_ctrl(1) = 'data/MIST/UBVRIplus/MIST_v1.2_feh_m1.00_afe_p0.0_vvcrit0.0_UBVRIplus.iso.cmd'
     x_character_ctrl(2) = 'data/filters/GAIA/GAIA'
 
     photo_interval = 100

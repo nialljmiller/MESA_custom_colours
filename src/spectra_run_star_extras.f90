@@ -361,7 +361,7 @@ module run_star_extras
               end if
 
               names(i) = filter_name
-              !PRINT *, "  Filter:", filter_name
+              PRINT *, "  Filter:", filter_name
               ! Prepend filter name with filter dir to generate filepath
               filter_filepath = trim(filter_dir) // "/" // array_of_strings(i-2)
 
@@ -372,7 +372,7 @@ module run_star_extras
                 vals(i) = -1.0_dp
                 ierr = 1
             end if
-            print *, names(i), vals(i)
+            !print *, names(i), vals(i)
             !STOP
           end do
       else
@@ -429,8 +429,8 @@ module run_star_extras
 
     ! Perform trapezoidal integration
     CALL TrapezoidalIntegration(wavelengths, fluxes, synthetic_flux)
-    !print *, wavelengths
-    !print *, fluxes
+    print *, wavelengths
+    print *, fluxes
     ! Validate integration result
     IF (synthetic_flux <= 0.0) THEN
       PRINT *, "Error: Flux integration resulted in non-positive value."
@@ -440,7 +440,7 @@ module run_star_extras
 
 
     ! Calculate synthetic magnitude
-    !print *, synthetic_flux
+    print *, synthetic_flux
     synthetic_magnitude = -2.5 * LOG10(synthetic_flux) - 4.74!48.6
     !print *, synthetic_magnitude
 
@@ -521,7 +521,7 @@ REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity,
     CLOSE(10)
 
     ! Inform the user of successful writing
-    !PRINT *, "Data written to ", csv_file
+    PRINT *, "Data written to ", csv_file
 
     ! Calculate synthetic flux and magnitude
     CALL CalculateSyntheticFlux(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux)
@@ -532,7 +532,7 @@ REAL(DP) FUNCTION CalculateSyntheticMagnitude(temperature, gravity, metallicity,
     ELSE
         magnitude = -1.0_DP
     END IF
-    !print *, magnitude
+    print *, magnitude
     CalculateSyntheticMagnitude = magnitude
 END FUNCTION CalculateSyntheticMagnitude
 
@@ -555,9 +555,7 @@ END FUNCTION CalculateSyntheticMagnitude
 
     ! Call to load the lookup table
     CALL LoadLookupTable(lookup_file, lookup_table, file_names, lu_logg, lu_meta, lu_teff)
-    !print *, 'logg', lu_logg
-    !print *,  'meta', lu_meta
-    !print *, 'teff', lu_teff
+
     ! Interpolate Spectral Energy Distribution
     CALL InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
 
@@ -635,38 +633,24 @@ END FUNCTION CalculateSyntheticMagnitude
 
       ! Populate arrays
       out_file_names(i) = columns(1)
-      !PRINT *, columns
 
-      IF (logg_col > 0) THEN
-        IF (columns(logg_col) /= "") THEN
-          READ(columns(logg_col), *) out_logg(i)
-        ELSE
-          out_logg(i) = 0.0
-        END IF
+      IF (logg_col > 0 .AND. columns(logg_col) /= "") THEN
+        READ(columns(logg_col), *) out_logg(i)
       ELSE
-        out_logg(i) = 0.0
+        out_logg(i) = -1.0
       END IF
 
-      IF (meta_col > 0) THEN
-        IF (columns(meta_col) /= "") THEN
-          READ(columns(meta_col), *) out_meta(i)
-        ELSE
-          out_meta(i) = 0.0
-        END IF
+      IF (meta_col > 0 .AND. columns(meta_col) /= "") THEN
+        READ(columns(meta_col), *) out_meta(i)
       ELSE
-        out_meta(i) = 0.0
+        out_meta(i) = -1.0
       END IF
 
-      IF (teff_col > 0) THEN
-        IF (columns(teff_col) /= "") THEN
-          READ(columns(teff_col), *) out_teff(i)
-        ELSE
-          out_teff(i) = 0.0
-        END IF
+      IF (teff_col > 0 .AND. columns(teff_col) /= "") THEN
+        READ(columns(teff_col), *) out_teff(i)
       ELSE
-        out_teff(i) = 0.0
+        out_teff(i) = -1.0
       END IF
-
     END DO
 
     CLOSE(unit)
@@ -745,11 +729,11 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
   INTEGER, DIMENSION(4), INTENT(OUT) :: closest_indices
 
   INTEGER :: i, n, j
-  REAL(DP) :: distance, norm_teff, norm_logg, norm_meta
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: scaled_lu_teff, scaled_lu_logg, scaled_lu_meta
-  REAL(DP), DIMENSION(4) :: min_distances
+  REAL :: distance, norm_teff, norm_logg, norm_meta
+  REAL, DIMENSION(:), ALLOCATABLE :: scaled_lu_teff, scaled_lu_logg, scaled_lu_meta
+  REAL, DIMENSION(4) :: min_distances
   INTEGER, DIMENSION(4) :: indices
-  REAL(DP) :: teff_min, teff_max, logg_min, logg_max, meta_min, meta_max, teff_dist, logg_dist, meta_dist
+  REAL :: teff_min, teff_max, logg_min, logg_max, meta_min, meta_max
 
   n = SIZE(lu_teff)
   min_distances = HUGE(1.0)
@@ -766,17 +750,9 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
   ! Allocate and scale lookup table values
   ALLOCATE(scaled_lu_teff(n), scaled_lu_logg(n), scaled_lu_meta(n))
 
-  IF (teff_max - teff_min > 0.00) THEN
-    scaled_lu_teff = (lu_teff - teff_min) / (teff_max - teff_min)
-  END IF
-
-  IF (logg_max - logg_min > 0.00) THEN
-    scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
-  END IF
-
-  IF (meta_max - meta_min > 0.00) THEN    
-    scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
-  END IF
+  scaled_lu_teff = (lu_teff - teff_min) / (teff_max - teff_min)
+  scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
+  scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
 
   ! Normalize input parameters
   norm_teff = (teff - teff_min) / (teff_max - teff_min)
@@ -785,39 +761,15 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
 
   ! Debug: !PRINT normalized input parameters
   !PRINT *, "Normalized parameters for target:"
-  PRINT *, "  teff = ", teff, "  logg = ", log_g, "  meta = ", metallicity, n
+  !PRINT *, "  norm_teff = ", norm_teff, "  norm_logg = ", norm_logg, "  norm_meta = ", norm_meta
 
   ! Find closest models
   DO i = 1, n
-
-    teff_dist = 0.0
-    logg_dist = 0.0
-    meta_dist = 0.0
-
-    IF (teff_max - teff_min > 0.00) THEN
-      teff_dist = scaled_lu_teff(i) - norm_teff
-    END IF
-
-    IF (logg_max - logg_min > 0.00) THEN
-      logg_dist = scaled_lu_logg(i) - norm_logg
-    END IF
-
-    IF (meta_max - meta_min > 0.00) THEN    
-      meta_dist = scaled_lu_meta(i) - norm_meta
-    END IF
-
-
-    distance = SQRT(teff_dist**2 + logg_dist**2 + meta_dist**2)
+    distance = SQRT((scaled_lu_teff(i) - norm_teff)**2 + &
+                    (scaled_lu_logg(i) - norm_logg)**2 + &
+                    (scaled_lu_meta(i) - norm_meta)**2)
 
     ! Check if this distance is smaller than any in the current top 4
-    !PRINT *, distance
-    !PRINT *, scaled_lu_teff(i)
-    !PRINT *, norm_teff
-    !PRINT *, scaled_lu_logg(i)
-    !PRINT *, norm_logg
-    !PRINT *, scaled_lu_meta(i)
-    !PRINT *, norm_meta
-
     DO j = 1, 4
       IF (distance < min_distances(j)) THEN
         ! Shift larger distances down
@@ -836,13 +788,13 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
 
   ! Debug: !PRINT details of the closest models
   !PRINT *, "Closest models (normalized):"
-  DO j = 1, 4
-    PRINT *, "  Index = ", closest_indices(j), &
-             ", teff = ", lu_teff(closest_indices(j)), &
-             ", logg = ", lu_logg(closest_indices(j)), &
-             ", meta = ", lu_meta(closest_indices(j)), &
-             ", Distance = ", min_distances(j)
-  END DO
+  !DO j = 1, 4
+  !  !PRINT *, "  Index = ", closest_indices(j), &
+  !           ", norm_teff = ", scaled_lu_teff(closest_indices(j)), &
+  !           ", norm_logg = ", scaled_lu_logg(closest_indices(j)), &
+  !           ", norm_meta = ", scaled_lu_meta(closest_indices(j)), &
+  !           ", Distance = ", min_distances(j)
+  !END DO
 
   ! Deallocate arrays
   DEALLOCATE(scaled_lu_teff, scaled_lu_logg, scaled_lu_meta)
@@ -925,15 +877,12 @@ SUBROUTINE InterpolateSED(teff, log_g, metallicity, file_names, lu_teff, lu_logg
     weights(i) = 1.0 / distances(i)
 
     ! Debug !PRINT: Distance and weight for each model
+    !PRINT *, "Model ", i, ": Distance = ", distances(i), ", Weight = ", weights(i)
   END DO
 
   ! Normalize weights
   sum_weights = SUM(weights)
   weights = weights / sum_weights
-
-  DO i = 1, 4
-    PRINT *, "Model ", i, ": Distance = ", distances(i), ", Weight = ", weights(i)
-  END DO
 
   ! Debug !PRINT: Normalized weights
   !PRINT *, "Normalized weights:", weights
@@ -1025,7 +974,7 @@ END SUBROUTINE InterpolateSED
       i = i + 1
       !=======================================================================================================================================================
       ! Convert f_lambda to f_nu
-      wavelengths(i) = temp_wavelength * 1.0e-10
+      wavelengths(i) = temp_wavelength * 1.0e-8
       flux(i) = temp_flux !* (temp_wavelength * 1.0e-8)**2 / (2.998e10)
     END DO
 
@@ -1087,7 +1036,7 @@ END SUBROUTINE InterpolateSED
       IF (status /= 0) EXIT
       i = i + 1
       
-      filter_wavelengths(i) = temp_wavelength * 1.0e-10
+      filter_wavelengths(i) = temp_wavelength * 1.0e-8
       filter_trans(i) = temp_trans
     END DO
 
