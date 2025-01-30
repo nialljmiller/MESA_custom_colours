@@ -363,7 +363,7 @@ module run_star_extras
                   vals(i) = -1.0_dp
                   ierr = 1
               end if
-              !print *, names(i), vals(i)
+              print *, names(i), vals(i)
           end do
       else
           ierr = 1 ! Indicate an error if array_of_strings is not allocated
