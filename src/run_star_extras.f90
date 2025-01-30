@@ -1068,10 +1068,13 @@ END FUNCTION CalculateSynthetic
 
     ! Determine column indices for logg, meta, and teff
     logg_col = GetColumnIndex(headers, "logg")
-    meta_col = GetColumnIndex(headers, "meta")
     teff_col = GetColumnIndex(headers, "teff")
 
-    ! Count the number of rows in the file
+    meta_col = GetColumnIndex(headers, "meta")
+    IF (meta_col < 0) THEN
+      meta_col = GetColumnIndex(headers, "feh")
+    END IF 
+
     n_rows = 0
     DO
       READ(unit, '(A)', IOSTAT=status) line

@@ -128,10 +128,10 @@ def main():
     print("Welcome to the Lookup Table Filter Tool!")
 
     # Base directory containing lookup tables
-    base_dir = input("Enter the path to the base directory containing lookup tables: ").strip()
+    base_dir = input("Enter the path to the base directory containing lookup tables (Default : ../../data/stellar_models/): ").strip()
     if not os.path.exists(base_dir):
         print("Error: Base directory does not exist.")
-        base_dir =  '../data/stellar_models/'
+        base_dir =  '../../data/stellar_models/'
         #return
 
     # List all lookup tables

@@ -91,7 +91,7 @@ def regenerate_lookup_table(model, files, output_dir):
 
 def main():
     # Define the base directory
-    base_dir = "../data/stellar_models/"
+    base_dir = "../../data/stellar_models/"
     os.makedirs(base_dir, exist_ok=True)
 
     # Scan for existing models and files
