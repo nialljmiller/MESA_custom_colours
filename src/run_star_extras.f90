@@ -339,7 +339,7 @@ module run_star_extras
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
 
-      !print *, "################################################"
+      print *, "################################################"
       
       ! Compute bolometric values
       CALL CalculateBolometric(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
@@ -844,6 +844,12 @@ END FUNCTION CalculateSynthetic
 
 
 
+
+
+
+
+
+
 !****************************
 !Trapezoidal Integration For Flux Calculation
 !****************************
@@ -859,24 +865,6 @@ END FUNCTION CalculateSynthetic
       FluxToMagnitude = -2.5 * LOG10(flux) 
     END IF
   END FUNCTION FluxToMagnitude
-
-
-
-
-
-  
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
@@ -1025,10 +1013,6 @@ END FUNCTION CalculateSynthetic
 
     CLOSE(unit)
   END SUBROUTINE LoadFilter
-
-
-
-
 
 
 !****************************
@@ -1208,18 +1192,9 @@ END FUNCTION CalculateSynthetic
 
 
 
-
-
-
-
-
-
   !###########################################################
   !## MATHS
   !###########################################################
-
-
-
 
 !****************************
 !Trapezoidal and Simpson Integration For Flux Calculation
