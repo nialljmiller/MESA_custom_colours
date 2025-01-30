@@ -363,7 +363,7 @@ module run_star_extras
                   vals(i) = -1.0_dp
                   ierr = 1
               end if
-              print *, names(i), vals(i)
+              !print *, names(i), vals(i)
           end do
       else
           ierr = 1 ! Indicate an error if array_of_strings is not allocated
@@ -529,7 +529,7 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
 
   ! Debug: !PRINT normalized input parameters
   !PRINT *, "Normalized parameters for target:"
-  PRINT *, "  teff = ", teff, "  logg = ", log_g, "  meta = ", metallicity, n
+  !PRINT *, "  teff = ", teff, "  logg = ", log_g, "  meta = ", metallicity, n
 
   ! Find closest models
   DO i = 1, n
@@ -580,13 +580,13 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
 
   ! Debug: !PRINT details of the closest models
   !PRINT *, "Closest models (normalized):"
-  DO j = 1, 4
-    PRINT *, "  Index = ", closest_indices(j), &
-             ", teff = ", lu_teff(closest_indices(j)), &
-             ", logg = ", lu_logg(closest_indices(j)), &
-             ", meta = ", lu_meta(closest_indices(j)), &
-             ", Distance = ", min_distances(j)
-  END DO
+  !DO j = 1, 4
+  !  PRINT *, "  Index = ", closest_indices(j), &
+  !           ", teff = ", lu_teff(closest_indices(j)), &
+  !           ", logg = ", lu_logg(closest_indices(j)), &
+  !           ", meta = ", lu_meta(closest_indices(j)), &
+  !           ", Distance = ", min_distances(j)
+  !END DO
 
   ! Deallocate arrays
   DEALLOCATE(scaled_lu_teff, scaled_lu_logg, scaled_lu_meta)
