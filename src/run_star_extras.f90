@@ -620,7 +620,7 @@ END SUBROUTINE GetClosestStellarModels
     !PRINT *, "Fluxes (first 5):", fluxes(1:MIN(5, SIZE(fluxes)))
 
     ! Call trapezoidal integration
-    CALL TrapezoidalIntegration(wavelengths, fluxes, bolometric_flux)
+    CALL SimpsonIntegration(wavelengths, fluxes, bolometric_flux)
 
     ! Debug: Check the integration result
     !PRINT *, "Integrated Flux:", bolometric_flux
@@ -752,7 +752,7 @@ CLOSE(10)
     !PRINT *, "Data written to ", csv_file
 
     ! Calculate synthetic flux and magnitude
-    CALL CalculateSyntheticPhot(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux)
+    CALL CalculateSyntheticPhot(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux, filter_wavelengths, filter_trans)
 
     ! Calculate and return the synthetic magnitude
     IF (synthetic_flux > 0.0_DP) THEN
@@ -801,12 +801,13 @@ END FUNCTION CalculateSynthetic
 !****************************
 !Calculate Synthetic Flux and Magnitude
 !****************************
-  SUBROUTINE CalculateSyntheticPhot(wavelengths, fluxes, synthetic_magnitude, synthetic_flux)
+  SUBROUTINE CalculateSyntheticPhot(wavelengths, fluxes, synthetic_magnitude, synthetic_flux, filter_wavelengths, filter_trans)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
+    REAL(DP), DIMENSION(:), INTENT(IN) :: filter_wavelengths, filter_trans
     REAL(DP), INTENT(OUT) :: synthetic_magnitude, synthetic_flux
     INTEGER :: i
-    REAL(DP) :: integrated_flux
+    REAL(DP) :: integrated_flux, integrated_filter
 
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
@@ -816,7 +817,8 @@ END FUNCTION CalculateSynthetic
       END IF
     END DO
 
-    CALL TrapezoidalIntegration(wavelengths, fluxes, integrated_flux)
+    CALL SimpsonIntegration(wavelengths, fluxes, integrated_flux)
+    CALL SimpsonIntegration(filter_wavelengths, filter_trans * filter_wavelengths, integrated_filter)
 
     ! Validate integration result
     IF (integrated_flux <= 0.0) THEN
@@ -826,12 +828,37 @@ END FUNCTION CalculateSynthetic
     END IF
 
     ! Store the total flux
-    synthetic_flux = integrated_flux
+    IF (integrated_filter > 0.0) THEN
+        synthetic_flux = integrated_flux / integrated_filter
+    ELSE
+        PRINT *, "Error: Integrated filter transmission is zero."
+        synthetic_flux = -1.0_DP
+        RETURN
+    END IF
 
     ! Calculate synthetic magnitude using the standard bolometric zero point
     synthetic_magnitude = FluxToMagnitude(synthetic_flux)
 
   END SUBROUTINE CalculateSyntheticPhot
+
+
+
+
+!****************************
+!Trapezoidal Integration For Flux Calculation
+!****************************
+
+  REAL(DP) FUNCTION FluxToMagnitude(flux)
+    IMPLICIT NONE
+    REAL(DP), INTENT(IN) :: flux
+    print *, 'flux:', flux
+    IF (flux <= 0.0) THEN
+      PRINT *, "Error: Flux must be positive to calculate magnitude."
+      FluxToMagnitude = 99.0  ! Return an error value
+    ELSE
+      FluxToMagnitude = -2.5 * LOG10(flux) 
+    END IF
+  END FUNCTION FluxToMagnitude
 
 
 
@@ -925,8 +952,8 @@ END FUNCTION CalculateSynthetic
       IF (status /= 0) EXIT
       i = i + 1
       ! Convert f_lambda to f_nu
-      wavelengths(i) = temp_wavelength * 1.0e-8
-      flux(i) = temp_flux !* (temp_wavelength * 1.0e-8)**2 / (2.998e10)
+      wavelengths(i) = temp_wavelength
+      flux(i) = temp_flux
     END DO
 
     CLOSE(unit)
@@ -992,7 +1019,7 @@ END FUNCTION CalculateSynthetic
       IF (status /= 0) EXIT
       i = i + 1
       
-      filter_wavelengths(i) = temp_wavelength * 1.0e-8
+      filter_wavelengths(i) = temp_wavelength
       filter_trans(i) = temp_trans
     END DO
 
@@ -1189,29 +1216,10 @@ END FUNCTION CalculateSynthetic
   !###########################################################
 
 
-!****************************
-!Trapezoidal Integration For Flux Calculation
-!****************************
-
-  REAL(DP) FUNCTION FluxToMagnitude(flux)
-    IMPLICIT NONE
-    REAL(DP), INTENT(IN) :: flux
-    print *, 'flux:', flux
-    IF (flux <= 0.0) THEN
-      PRINT *, "Error: Flux must be positive to calculate magnitude."
-      FluxToMagnitude = 99.0  ! Return an error value
-    ELSE
-      FluxToMagnitude = -2.5 * LOG10(flux) - 4.74
-    END IF
-  END FUNCTION FluxToMagnitude
-
-
-
-
 
 
 !****************************
-!Trapezoidal Integration For Flux Calculation
+!Trapezoidal and Simpson Integration For Flux Calculation
 !****************************
 
   SUBROUTINE TrapezoidalIntegration(x, y, result)
@@ -1243,6 +1251,51 @@ END FUNCTION CalculateSynthetic
 
     result = sum
   END SUBROUTINE TrapezoidalIntegration
+
+
+SUBROUTINE SimpsonIntegration(x, y, result)
+  IMPLICIT NONE
+  INTEGER, PARAMETER :: DP = KIND(1.0D0)
+  REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
+  REAL(DP), INTENT(OUT) :: result
+
+  INTEGER :: i, n
+  REAL(DP) :: sum, h1, h2, f1, f2, f0
+
+  n = SIZE(x)
+  sum = 0.0_DP
+
+  ! Validate input sizes
+  IF (SIZE(x) /= SIZE(y)) THEN
+    PRINT *, "Error: x and y arrays must have the same size."
+    STOP
+  END IF
+
+  IF (SIZE(x) < 2) THEN
+    PRINT *, "Error: x and y arrays must have at least 2 elements."
+    STOP
+  END IF
+
+  ! Perform adaptive Simpson’s rule
+  DO i = 1, n - 2, 2
+    h1 = x(i+1) - x(i)       ! Step size for first interval
+    h2 = x(i+2) - x(i+1)     ! Step size for second interval
+
+    f0 = y(i)
+    f1 = y(i+1)
+    f2 = y(i+2)
+
+    ! Simpson's rule: (h/3) * (f0 + 4f1 + f2)
+    sum = sum + (h1 + h2) / 6.0_DP * (f0 + 4.0_DP * f1 + f2)
+  END DO
+
+  ! Handle the case where n is odd (last interval)
+  IF (MOD(n,2) == 0) THEN
+    sum = sum + 0.5_DP * (x(n) - x(n-1)) * (y(n) + y(n-1))
+  END IF
+
+  result = sum
+END SUBROUTINE SimpsonIntegration
 
 
 

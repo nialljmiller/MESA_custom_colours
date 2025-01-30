@@ -68,7 +68,7 @@ def process_all_files(directory, xlim=None):
 
 def main():
     directory = '../LOGS/SED/'  # Change if needed
-    process_all_files(directory, xlim=[0,0.0005])
+    process_all_files(directory)#, xlim=[0,0.0005])
 
 if __name__ == "__main__":
     main()
