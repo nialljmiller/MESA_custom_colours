@@ -339,7 +339,7 @@ module run_star_extras
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
 
-      print *, "################################################"
+      !print *, "################################################"
       
       ! Compute bolometric values
       CALL CalculateBolometric(teff, log_g, metallicity, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
@@ -851,7 +851,7 @@ END FUNCTION CalculateSynthetic
   REAL(DP) FUNCTION FluxToMagnitude(flux)
     IMPLICIT NONE
     REAL(DP), INTENT(IN) :: flux
-    print *, 'flux:', flux
+    !print *, 'flux:', flux
     IF (flux <= 0.0) THEN
       PRINT *, "Error: Flux must be positive to calculate magnitude."
       FluxToMagnitude = 99.0  ! Return an error value
