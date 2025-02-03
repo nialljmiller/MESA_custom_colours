@@ -818,7 +818,7 @@ END FUNCTION CalculateSynthetic
     END DO
 
     CALL SimpsonIntegration(wavelengths, fluxes, integrated_flux)
-    CALL SimpsonIntegration(filter_wavelengths, filter_trans * filter_wavelengths, integrated_filter)
+    CALL SimpsonIntegration(filter_wavelengths, filter_trans, integrated_filter)
 
     ! Validate integration result
     IF (integrated_flux <= 0.0) THEN
@@ -871,7 +871,7 @@ END FUNCTION CalculateSynthetic
 
 
 
-
+                          
 
 
 !###########################################################
