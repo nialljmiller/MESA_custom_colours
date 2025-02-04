@@ -1,3 +1,4 @@
+
 ! ***********************************************************************
 !
 !   Copyright (C) 2017-2019  Rob Farmer & The MESA Team
@@ -318,7 +319,7 @@ module run_star_extras
       integer :: i, num_strings
       character(len=100), allocatable :: array_of_strings(:)
       real(dp) :: teff, log_g, metallicity, bolometric_magnitude, bolometric_flux
-      character(len=256) :: sed_filepath, filter_filepath, filter_name, filter_dir
+      character(len=256) :: sed_filepath, filter_filepath, filter_name, filter_dir, vega_filepath
       real(dp), dimension(:), allocatable :: wavelengths, fluxes, filter_wavelengths, filter_trans
       logical :: make_sed
       
@@ -332,7 +333,8 @@ module run_star_extras
       metallicity = s%job%extras_rpar(1)
       sed_filepath = s%x_character_ctrl(1)
       filter_dir = s%x_character_ctrl(2)
-      make_sed = trim(adjustl(s%x_character_ctrl(3))) == 'true'
+      vega_filepath = s%x_character_ctrl(3)
+      make_sed = trim(adjustl(s%x_character_ctrl(4))) == 'true'
       
       ! Read filters from file
       if (allocated(array_of_strings)) deallocate(array_of_strings)
@@ -357,7 +359,7 @@ module run_star_extras
               filter_filepath = trim(filter_dir) // "/" // array_of_strings(i - 2)
               
               if (teff >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
-                  vals(i) = CalculateSynthetic(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, array_of_strings(i - 2), make_sed)
+                  vals(i) = CalculateSynthetic(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, vega_filepath, array_of_strings(i - 2), make_sed)
                   if (ierr /= 0) vals(i) = -1.0_dp
               else
                   vals(i) = -1.0_dp
@@ -664,25 +666,25 @@ END SUBROUTINE GetClosestStellarModels
 !Calculate Synthetic Photometry Using SED and Filter
 !****************************
 
-REAL(DP) FUNCTION CalculateSynthetic(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, filter_name, make_sed)
+REAL(DP) FUNCTION CalculateSynthetic(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, vega_filepath, filter_name, make_sed)
     IMPLICIT NONE
 
     ! Input arguments
     REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
-    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath, filter_name
+    CHARACTER(LEN=*), INTENT(IN) :: filter_filepath, filter_name, vega_filepath
     INTEGER, INTENT(OUT) :: ierr
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
     REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(INOUT) :: filter_wavelengths, filter_trans
     LOGICAL, INTENT(IN) :: make_sed
+    LOGICAL :: dir_exists
     ! Local variables
     REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux, interpolated_filter
     CHARACTER(LEN=1000) :: line
     CHARACTER(LEN=100) :: csv_file
-    REAL(DP) :: synthetic_magnitude, synthetic_flux
+    REAL(DP) :: synthetic_magnitude, synthetic_flux, vega_flux
     INTEGER :: max_size, i
     REAL(DP) :: magnitude
     REAL(DP) :: wv, fl, cf, fwv, ftr
-
 
     csv_file =  'LOGS/SED/' //TRIM(remove_dat(filter_name)) // '_SED.csv'
     ! Initialize error flag
@@ -704,8 +706,9 @@ REAL(DP) FUNCTION CalculateSynthetic(temperature, gravity, metallicity, ierr, wa
         interpolated_filter = 0.0_DP
     END IF
 
-    ! Perform SED convolution
-    CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
+      ! Perform SED convolution
+  ALLOCATE(convolved_flux(SIZE(wavelengths)))
+  CALL ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
 
   IF (make_sed) THEN
 ! Determine the maximum size among all arrays
@@ -750,18 +753,18 @@ CLOSE(10)
 
     ! Inform the user of successful writing
     !PRINT *, "Data written to ", csv_file
+    vega_flux = CalculateVegaFlux(vega_filepath, filter_wavelengths, filter_trans, make_sed)
 
     ! Calculate synthetic flux and magnitude
-    CALL CalculateSyntheticPhot(wavelengths, convolved_flux, synthetic_magnitude, synthetic_flux, filter_wavelengths, filter_trans)
+    CALL CalculateSyntheticFlux(wavelengths, convolved_flux, synthetic_flux, filter_wavelengths, filter_trans)
 
-    ! Calculate and return the synthetic magnitude
-    IF (synthetic_flux > 0.0_DP) THEN
-        magnitude = synthetic_magnitude
+    IF (vega_flux > 0.0_DP) THEN
+      CalculateSynthetic = -2.5 * LOG10(synthetic_flux / vega_flux)
     ELSE
-        magnitude = -1.0_DP
+      PRINT *, "Error: Vega flux is zero, magnitude calculation is invalid."
+      CalculateSynthetic = HUGE(1.0_DP)
     END IF
-    !print *, magnitude
-    CalculateSynthetic = magnitude
+
 END FUNCTION CalculateSynthetic
 
 
@@ -784,7 +787,7 @@ END FUNCTION CalculateSynthetic
 
     ! Allocate arrays
     ALLOCATE(interpolated_filter(n))
-    ALLOCATE(convolved_flux(n))
+    !ALLOCATE(convolved_flux(n))
 
     ! Interpolate the filter transmission onto the wavelengths array
     CALL InterpolateArray(filter_wavelengths, filter_trans, wavelengths, interpolated_filter)
@@ -801,13 +804,16 @@ END FUNCTION CalculateSynthetic
 !****************************
 !Calculate Synthetic Flux and Magnitude
 !****************************
-  SUBROUTINE CalculateSyntheticPhot(wavelengths, fluxes, synthetic_magnitude, synthetic_flux, filter_wavelengths, filter_trans)
+  SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_flux, filter_wavelengths, filter_trans)
     IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
-    REAL(DP), DIMENSION(:), INTENT(IN) :: filter_wavelengths, filter_trans
-    REAL(DP), INTENT(OUT) :: synthetic_magnitude, synthetic_flux
+    REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
+    REAL(DP), INTENT(OUT) :: synthetic_flux
     INTEGER :: i
     REAL(DP) :: integrated_flux, integrated_filter
+    CHARACTER(LEN=256) :: vega_filepath
+
+
 
     ! Validate inputs
     DO i = 1, SIZE(wavelengths) - 1
@@ -820,13 +826,6 @@ END FUNCTION CalculateSynthetic
     CALL SimpsonIntegration(wavelengths, fluxes, integrated_flux)
     CALL SimpsonIntegration(filter_wavelengths, filter_trans, integrated_filter)
 
-    ! Validate integration result
-    IF (integrated_flux <= 0.0) THEN
-      PRINT *, "Error: Flux integration resulted in non-positive value."
-      synthetic_magnitude = 99.0
-      RETURN
-    END IF
-
     ! Store the total flux
     IF (integrated_filter > 0.0) THEN
         synthetic_flux = integrated_flux / integrated_filter
@@ -836,23 +835,9 @@ END FUNCTION CalculateSynthetic
         RETURN
     END IF
 
-    ! Calculate synthetic magnitude using the standard bolometric zero point
-    synthetic_magnitude = FluxToMagnitude(synthetic_flux)
-
-  END SUBROUTINE CalculateSyntheticPhot
+  END SUBROUTINE CalculateSyntheticFlux
 
 
-
-
-
-
-
-
-
-
-!****************************
-!Trapezoidal Integration For Flux Calculation
-!****************************
 
   REAL(DP) FUNCTION FluxToMagnitude(flux)
     IMPLICIT NONE
@@ -870,6 +855,113 @@ END FUNCTION CalculateSynthetic
 
 
 
+
+FUNCTION CalculateVegaFlux(vega_filepath, filt_wave, filt_trans, make_sed) RESULT(vega_flux)
+  IMPLICIT NONE
+  CHARACTER(LEN=*), INTENT(IN) :: vega_filepath
+  CHARACTER(len = 100) :: output_csv
+  REAL(DP), DIMENSION(:), INTENT(INOUT) :: filt_wave, filt_trans
+  REAL(DP) :: vega_flux
+  REAL(DP) :: int_flux, int_filter
+  REAL(DP), ALLOCATABLE :: vega_wave(:), vega_flux_arr(:), conv_flux(:)
+  LOGICAL, INTENT(IN) :: make_sed
+  INTEGER :: i, unit
+
+  ! Load the Vega SED using the custom routine.
+  CALL LoadVegaSED(vega_filepath, vega_wave, vega_flux_arr)
+
+  ! Convolve the Vega SED with the filter transmission.
+  CALL ConvolveSED(vega_wave, vega_flux_arr, filt_wave, filt_trans, conv_flux)
+
+  ! Integrate the convolved Vega SED and the filter transmission.
+  CALL SimpsonIntegration(vega_wave, conv_flux, int_flux)
+  CALL SimpsonIntegration(filt_wave, filt_trans, int_filter)
+
+  IF (int_filter > 0.0_DP) THEN
+    vega_flux = int_flux / int_filter
+  ELSE
+    vega_flux = -1.0_DP
+  END IF
+
+  ! Save Vega SED if requested
+  IF (make_sed) THEN
+    output_csv = 'LOGS/SED/VEGA_' //TRIM(remove_dat(filter_name)) // '_SED.csv'
+
+    ! Open file for writing
+    OPEN(UNIT=10, FILE=output_csv, STATUS='REPLACE', ACTION='WRITE')
+
+    ! Write header
+    !WRITE(10, '(A)') 'wavelengths,convolved_flux'
+    WRITE(10, '(A)') "wavelengths,fluxes,convolved_flux,filter_wavelengths,filter_trans"
+
+    DO i = 1, MIN(SIZE(vega_wave), SIZE(filt_wave))
+      WRITE(10, '(ES14.6, ",", ES14.6, ",", ES14.6, ",", ES14.6, ",", ES14.6)') &
+        vega_wave(i), vega_flux_arr(i), conv_flux(i), filt_wave(i), filt_trans(i)
+    END DO
+
+    ! Close file
+    CLOSE(10)
+  END IF
+
+  DEALLOCATE(conv_flux, vega_wave, vega_flux_arr)
+END FUNCTION CalculateVegaFlux
+
+
+
+
+
+
+
+
+
+
+SUBROUTINE LoadVegaSED(filepath, wavelengths, flux)
+  IMPLICIT NONE
+  CHARACTER(LEN=*), INTENT(IN) :: filepath
+  REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
+  CHARACTER(LEN=512) :: line
+  INTEGER :: unit, n_rows, status, i
+  REAL(DP) :: temp_wave, temp_flux
+
+  unit = 20
+  OPEN(unit, FILE=TRIM(filepath), STATUS='OLD', ACTION='READ', IOSTAT=status)
+  IF (status /= 0) THEN
+    PRINT *, "Error: Could not open Vega SED file ", TRIM(filepath)
+    STOP
+  END IF
+
+  ! Skip header line.
+  READ(unit, '(A)', IOSTAT=status) line
+  IF (status /= 0) THEN
+    PRINT *, "Error: Could not read header from Vega SED file ", TRIM(filepath)
+    STOP
+  END IF
+
+  ! Count the number of data lines.
+  n_rows = 0
+  DO
+    READ(unit, '(A)', IOSTAT=status) line
+    IF (status /= 0) EXIT
+    n_rows = n_rows + 1
+  END DO
+
+  REWIND(unit)
+  READ(unit, '(A)', IOSTAT=status) line  ! Skip header again
+
+  ALLOCATE(wavelengths(n_rows))
+  ALLOCATE(flux(n_rows))
+  
+  i = 0
+  DO
+    READ(unit, *, IOSTAT=status) temp_wave, temp_flux  ! Ignore any extra columns.
+    IF (status /= 0) EXIT
+    i = i + 1
+    wavelengths(i) = temp_wave
+    flux(i) = temp_flux
+  END DO
+
+  CLOSE(unit)
+END SUBROUTINE LoadVegaSED
 
                           
 
