@@ -28,7 +28,7 @@ MESA Colors Project
 
 3. This will download a 35MB file with JWST and Gaia filter transmission curves as well as Kurucz 2003 stellar atmosphere models and some pre computed black body curves. These will be stored in /data
 
-
+---
 ```
 mesa_colors/
 ├── data/
@@ -37,7 +37,7 @@ mesa_colors/
 │   ├── extracted_marker          # Marker file to identify if zip file has been extracted ot /data properly
 
 ```
-
+---
 
 
 ### Outputs
