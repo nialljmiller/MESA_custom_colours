@@ -81,6 +81,11 @@ Configuring a photometric filter system
 
 The phtometric filters are configered similarly to the stellar atmosphere models. Indeed, they are sourced from the same website -- http://svo2.cab.inta-csic.es/theory/fps/
 
+The filteres are ready by the code with the assumption that they are stored as:
+
+```data/filters/{TELESCOPE}/{INTRUMENT}/FILTER1.csv, FILTER2.csv...```
+
+
 
 Outputs
 -------
