@@ -39,6 +39,15 @@ Directory Structure
    │   ├── extracted_marker          # Marker file to confirm data extraction
    ├── inlist                        # Example inlist
 
+Inlist Options
+-------
+
+- **x_character_ctrl(1)** : 'data/stellar_models/Kurucz2003all/'   -- Stellar atmosphere model - http://svo2.cab.inta-csic.es/theory/newov2/
+- **x_character_ctrl(2)** : 'data/filters/GAIA/GAIA'               -- Photometric filter system - http://svo2.cab.inta-csic.es/theory/fps/
+- **x_character_ctrl(3)** : 'data/stellar_models/vega_flam.csv'    -- Vega SED for Vega photometric system
+- **x_character_ctrl(4)** : 'false'                                -- Save csv files of each constructed SED?
+
+
 Outputs
 -------
 
