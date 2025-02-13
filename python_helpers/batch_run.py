@@ -14,12 +14,12 @@ HISTORY_FILE = os.path.join(MESA_DIR, "LOGS/history.data")  # Default history fi
 
 # List of parameter file names corresponding to inlist options
 param_options = [
+    "MDwarf.params",
     "PopIII.params",
     "PopII.params"
     "OType.params",
     "BType.params",
     "AType.params",
-    "MDwarf.params",
 ]
 
 def update_inlist(selected_param, reset=False):
@@ -70,7 +70,7 @@ def run_mesa():
             print("❌ Unexpected MESA failure.")
             print(result.stdout)
             print(result.stderr)
-            raise subprocess.CalledProcessError(result.returncode, result.args)
+            #raise subprocess.CalledProcessError(result.returncode, result.args)
     
     finally:
         os.chdir(original_cwd)  # Restore original directory
