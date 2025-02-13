@@ -18,6 +18,7 @@ data/
 *.txz
 *.zip
 *.yml
+*.mod
 
 # Ignore other files you don't want to track
 fort.20
