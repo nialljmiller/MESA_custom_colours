@@ -76,6 +76,12 @@ Here is an example of the first few lines of the lookup table for the Kurucz2003
    Kurucz2003all_fid16208.txt,0,1.25,3,-0.5,10750,2
    Kurucz2003all_fid16209.txt,0,1.25,3.5,-0.5,10750,2
 
+Configuring a photometric filter system
+--------------------------------------
+
+The phtometric filters are configered similarly to the stellar atmosphere models. Indeed, they are sourced from the same website -- http://svo2.cab.inta-csic.es/theory/fps/
+
+
 Outputs
 -------
 
@@ -85,7 +91,7 @@ Outputs
 Dependencies
 ------------
 
-- **MESA** (Version 12778 or higher recommended)
+- **MESA** (Version 24.06.1 or higher recommended)
 - **Fortran Compiler** (e.g., `gfortran`, `ifort`)
 - **Python Helpers**:
   - Python 3
