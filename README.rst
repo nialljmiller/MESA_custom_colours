@@ -29,20 +29,22 @@ MESA Colors Project
 3. This will download a 35MB file with JWST and Gaia filter transmission curves as well as Kurucz 2003 stellar atmosphere models and some pre computed black body curves. These will be stored in /data
 
 
-```
+``
 mesa_colors/
 ├── data/
 │   ├── stellar_models/           # Stellar models (Kurucz, PHOENIX, etc.)
 │   ├── filters/                  # Filter profiles (e.g., GAIA, JWST, etc.)
 │   ├── extracted_marker          # Marker file to identify if zip file has been extracted ot /data properly
 
-```
+``
 
 
 
 ### Outputs
 
 - **History Columns**: Bolometric magnitudes and fluxes will be appended to the MESA history output.
+- **SED.csv**: If ``x_character_ctrl(4) = 'false'``. This will save csv files of each constructed SED.
+ 
 
 ---
 
