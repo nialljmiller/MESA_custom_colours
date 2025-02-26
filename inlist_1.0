@@ -2,8 +2,8 @@
 ! Uses predefined stellar class parameter files.
 
 &star_job
-      create_pre_main_sequence_model = .true.
-      pre_ms_relax_to_start_radiative_core = .true.
+      create_pre_main_sequence_model = .false.
+      pre_ms_relax_to_start_radiative_core = .false.
 
       save_model_when_terminate = .true.
       save_model_filename = 'custom_colors_end.mod'
@@ -15,8 +15,7 @@
       history_columns_file = 'custom_colors_history_columns.list'
 
       extras_lrpar = 1
-      extras_rpar(1) = 0.58d0   ! Metallicity
-      extras_rpar(2) = 3.0857d17   ! Stellar distance 'd' (10pc for abs mag...)
+      extras_rpar(1) = 3.0857d17   ! Stellar distance 'd' (10pc for abs mag...)
 
       show_log_description_at_start = .true. 
 
@@ -32,7 +31,7 @@
 
 
 &controls
-!##############################################################
+!==============================================================
 !#                      MESA controls test Setup              #
 !#                                                            #
 !# Choose ONE of the following setups:                        #
@@ -43,32 +42,32 @@
 !#                                                            #
 !# 2. Manually define initial mass, metallicity, and age      #
 !#    (Set 'read_extra_controls_inlist' to .false.)           #
-!##############################################################
+!==============================================================
 
     ! Option 1: Use predefined parameter files
-    read_extra_controls_inlist(1) = .true.
+    !read_extra_controls_inlist(1) = .true.
 
     ! Uncomment ONE of the following:
     !extra_controls_inlist_name(1) = 'inlist_template/PopIII.params'
     !extra_controls_inlist_name(1) = 'inlist_template/PopII.params'
     !extra_controls_inlist_name(1) = 'inlist_template/OType.params'
     !extra_controls_inlist_name(1) = 'inlist_template/BType.params'
-    extra_controls_inlist_name(1) = 'inlist_template/AType.params'
+    !extra_controls_inlist_name(1) = 'inlist_template/AType.params'
     !extra_controls_inlist_name(1) = 'inlist_template/MDwarf.params'
 
-    !# -------------------------------------------------------
-    !# OR
-    !# -------------------------------------------------------
+    !-------------------------------------------------------
+    ! OR
+    !-------------------------------------------------------
 
     !# Option 2: Manually define stellar properties
-    !read_extra_controls_inlist(1) = .false.
-    !initial_mass = 1.0d0   # Default: Sun-like star
-    !initial_z = 0.02d0     # Solar metallicity
-    !max_age = 13d9        # 13 Gyr (entire stellar evolution)
+    read_extra_controls_inlist(1) = .false.
+    initial_mass = 1.0d0   ! Default: Sun-like star
+    initial_z = 0.02d0     ! Solar metallicity
+    max_age = 13d9         ! 13 Gyr (entire stellar evolution)
 
-    !##############################################################
-    !# Note: Ensure only ONE setup is active at a time!          #
-    !##############################################################
+    !==============================================================
+    !# Note: Ensure only ONE setup is active at a time!          
+    !==============================================================
 
 
     x_character_ctrl(1) = 'data/stellar_models/Kurucz2003all/'   !Stellar atmosphere model - http://svo2.cab.inta-csic.es/theory/newov2/

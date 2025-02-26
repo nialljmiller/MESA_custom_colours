@@ -10,7 +10,7 @@
 !   by the free software foundation; either version 2 of the license, or
 !   (at your option) any later version.
 !
-!   mesa is distributed in the hope that it will be useful, 
+!   mesa is distributed in the hope that it will be useful,
 !   but without any warranty; without even the implied warranty of
 !   merchantability or fitness for a particular purpose.  see the
 !   gnu library general public license for more details.
@@ -20,11 +20,11 @@
 !   foundation, inc., 59 temple place, suite 330, boston, ma 02111-1307 usa
 !
 ! ***********************************************************************
- 
- 
 
- 
- 
+
+
+
+
 module run_star_extras
 
   use star_lib
@@ -57,7 +57,7 @@ module run_star_extras
     call star_ptr(id, s, ierr)
     if (ierr /= 0) return
        print *, "Extras startup routine"
-           
+
     call process_color_files(id, ierr)
     s% extras_startup => extras_startup
     s% extras_check_model => extras_check_model
@@ -69,18 +69,18 @@ module run_star_extras
     s% data_for_extra_profile_columns => data_for_extra_profile_columns
 
     print *, "Sellar atmosphere:", s% x_character_ctrl(1)
-    print *, "Instrument:", s% x_character_ctrl(2)         
+    print *, "Instrument:", s% x_character_ctrl(2)
 
   end subroutine extras_controls
 
-                
-      
-  
+
+
+
 
 !###########################################################
 !## THINGS I HAVE NOT TOUCHED
 !###########################################################
-  
+
   subroutine process_color_files(id, ierr)
     integer, intent(in) :: id
     integer, intent(out) :: ierr
@@ -116,9 +116,9 @@ module run_star_extras
      if (ierr /= 0) return
 
      write(*,'(a)') 'finished custom colors'
-     
+
      call test_suite_after_evolve(s, ierr)
-     
+
   end subroutine extras_after_evolve
 
 
@@ -130,13 +130,12 @@ module run_star_extras
      ierr = 0
      call star_ptr(id, s, ierr)
      if (ierr /= 0) return
-     extras_check_model = keep_going         
+     extras_check_model = keep_going
   end function extras_check_model
 
 
   INTEGER FUNCTION how_many_extra_profile_columns(id)
      USE star_def, ONLY: star_info
-     IMPLICIT NONE
      INTEGER, INTENT(IN) :: id
 
      INTEGER :: ierr
@@ -153,7 +152,6 @@ module run_star_extras
   SUBROUTINE data_for_extra_profile_columns(id, n, nz, names, vals, ierr)
      USE star_def, ONLY: star_info, maxlen_profile_column_name
      USE const_def, ONLY: DP
-     IMPLICIT NONE
      INTEGER, INTENT(IN) :: id, n, nz
      CHARACTER(LEN=maxlen_profile_column_name) :: names(n)
      REAL(DP) :: vals(nz, n)
@@ -171,7 +169,6 @@ module run_star_extras
   ! Returns either keep_going, retry, or terminate
   INTEGER FUNCTION extras_finish_step(id)
      USE chem_def
-     IMPLICIT NONE
      INTEGER, INTENT(IN) :: id
 
      INTEGER :: ierr
@@ -192,7 +189,7 @@ module run_star_extras
 !###########################################################
 !## MESA STUFF
 !###########################################################
-  
+
   !FUNCTIONS FOR OPENING LOOKUP FILE AND FINDING THE NUMBER OF FILES AND THIER FILE PATHS
   integer function how_many_extra_history_columns(id)
       ! Determines how many extra history columns are added based on a file
@@ -261,7 +258,6 @@ module run_star_extras
 
   subroutine read_strings_from_file(strings, n, id)
       ! Reads strings from a file into an allocatable array
-      implicit none
       integer, intent(in) :: id
       character(len=512) :: filename
       character(len=100), allocatable :: strings(:)
@@ -293,7 +289,7 @@ module run_star_extras
       do
           read(unit, '(A)', iostat=status) line
           if (status /= 0) exit
-          n = n + 1 ! for bolometric correctionms
+          n = n + 1  ! for bolometric correctionms
       end do
       rewind(unit)
 
@@ -322,37 +318,40 @@ module run_star_extras
       character(len=256) :: sed_filepath, filter_filepath, filter_name, filter_dir, vega_filepath
       real(dp), dimension(:), allocatable :: wavelengths, fluxes, filter_wavelengths, filter_trans
       logical :: make_sed
-      
+
       ierr = 0
       call star_ptr(id, s, ierr)
       if (ierr /= 0) return
 
       ! Extract input parameters
+      !    mesa/star_data/public/star_data_step_work.inc
       teff = s%T(1)
       log_g = LOG10(s%grav(1))
-      R = s%R(1)! * 1d3
-      metallicity = s%job%extras_rpar(1)
-      d = s%job%extras_rpar(2)      
+      R = s%R(1)  ! * 1d3
+      metallicity = s%Z(1)! mass fraction metals
+      !print * , metallicity
+      !stop
+      d = s%job%extras_rpar(1)
 
       sed_filepath = s%x_character_ctrl(1)
       filter_dir = s%x_character_ctrl(2)
       vega_filepath = s%x_character_ctrl(3)
       make_sed = trim(adjustl(s%x_character_ctrl(4))) == 'true'
-      
+
       ! Read filters from file
       if (allocated(array_of_strings)) deallocate(array_of_strings)
       allocate(array_of_strings(n))
       call read_strings_from_file(array_of_strings, num_strings, id)
 
       !PRINT *, "################################################"
-      
+
       ! Compute bolometric values
       CALL CalculateBolometric(teff, log_g, metallicity, R, d,  bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
       names(1) = "Mag_bol"
       vals(1) = bolometric_magnitude
       names(2) = "Flux_bol"
       vals(2) = bolometric_flux
-      
+
       ! Populate history columns
       if (allocated(array_of_strings)) then
           do i = 3, how_many_extra_history_columns(id)
@@ -360,7 +359,7 @@ module run_star_extras
               if (i <= num_strings + 2) filter_name = trim(remove_dat(array_of_strings(i - 2)))
               names(i) = filter_name
               filter_filepath = trim(filter_dir) // "/" // array_of_strings(i - 2)
-              
+
               if (teff >= 0 .and. log_g >= 0 .and. metallicity >= 0) then
                   vals(i) = CalculateSynthetic(teff, log_g, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, vega_filepath, array_of_strings(i - 2), make_sed)
                   if (ierr /= 0) vals(i) = -1.0_dp
@@ -371,9 +370,9 @@ module run_star_extras
               !PRINT *, names(i), vals(i)
           end do
       else
-          ierr = 1 ! Indicate an error if array_of_strings is not allocated
+          ierr = 1  ! Indicate an error if array_of_strings is not allocated
       end if
-      
+
       if (allocated(array_of_strings)) deallocate(array_of_strings)
   end subroutine data_for_extra_history_columns
 
@@ -389,7 +388,6 @@ module run_star_extras
 !****************************
 
   SUBROUTINE CalculateBolometric(teff, log_g, metallicity, R, d, bolometric_magnitude, bolometric_flux, wavelengths, fluxes, sed_filepath)
-    IMPLICIT NONE
     REAL(8), INTENT(IN) :: teff, log_g, metallicity, R, d
     CHARACTER(LEN=*), INTENT(IN) :: sed_filepath
     REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
@@ -408,8 +406,8 @@ module run_star_extras
     !print *,  'meta', lu_meta
     !print *, 'teff', lu_teff
     ! Interpolate Spectral Energy Distribution
-    !CALL ConstructSED_Interpolated(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
-    CALL ConstructSED(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)    
+    CALL ConstructSED_Robust(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+    !CALL ConstructSED(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
 
     ! Calculate bolometric flux and magnitude
     CALL CalculateBolometricPhot(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
@@ -422,7 +420,6 @@ module run_star_extras
 !****************************
 
 SUBROUTINE ConstructSED(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir, wavelengths, fluxes)
-  IMPLICIT NONE
   REAL(8), INTENT(IN) :: teff, log_g, metallicity, R, d
   REAL(8), INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
   CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
@@ -495,26 +492,25 @@ END SUBROUTINE ConstructSED
 
 
 SUBROUTINE dilute_flux(surface_flux, R, d, calibrated_flux)
-  IMPLICIT NONE
   ! Define the double precision kind if not already defined
   INTEGER, PARAMETER :: DP = KIND(1.0D0)
-  
+
   ! Input: surface_flux is an array of flux values at the stellar surface
   REAL(DP), INTENT(IN)  :: surface_flux(:)
   REAL(DP), INTENT(IN)  :: R, d  ! R = stellar radius, d = distance (both in the same units, e.g., cm)
-  
+
   ! Output: calibrated_flux will be the flux observed at Earth
   REAL(DP), INTENT(OUT) :: calibrated_flux(:)
-  
+
   ! Check that the output array has the same size as the input
   IF (SIZE(calibrated_flux) /= SIZE(surface_flux)) THEN
     PRINT *, "Error in dilute_flux: Output array must have the same size as input array."
     STOP 1
   END IF
-  
+
   ! Apply the dilution factor (R/d)^2 to each element
   calibrated_flux = surface_flux * ( (R / d)**2 )
-  
+
 END SUBROUTINE dilute_flux
 
 
@@ -527,7 +523,6 @@ END SUBROUTINE dilute_flux
 !****************************
 
 SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, closest_indices)
-  IMPLICIT NONE
   REAL(8), INTENT(IN) :: teff, log_g, metallicity
   REAL(8), INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
   INTEGER, DIMENSION(4), INTENT(OUT) :: closest_indices
@@ -562,7 +557,7 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
     scaled_lu_logg = (lu_logg - logg_min) / (logg_max - logg_min)
   END IF
 
-  IF (meta_max - meta_min > 0.00) THEN    
+  IF (meta_max - meta_min > 0.00) THEN
     scaled_lu_meta = (lu_meta - meta_min) / (meta_max - meta_min)
   END IF
 
@@ -590,21 +585,13 @@ SUBROUTINE GetClosestStellarModels(teff, log_g, metallicity, lu_teff, lu_logg, l
       logg_dist = scaled_lu_logg(i) - norm_logg
     END IF
 
-    IF (meta_max - meta_min > 0.00) THEN    
+    IF (meta_max - meta_min > 0.00) THEN
       meta_dist = scaled_lu_meta(i) - norm_meta
     END IF
 
 
-    distance = SQRT(teff_dist**2 + logg_dist**2 + meta_dist**2)
-
-    ! Check if this distance is smaller than any in the current top 4
-    !PRINT *, distance
-    !PRINT *, scaled_lu_teff(i)
-    !PRINT *, norm_teff
-    !PRINT *, scaled_lu_logg(i)
-    !PRINT *, norm_logg
-    !PRINT *, scaled_lu_meta(i)
-    !PRINT *, norm_meta
+    !distance = SQRT(teff_dist**2 + logg_dist**2 + meta_dist**2)
+    distance = teff_dist**2 + logg_dist**2 + meta_dist**2   !SQRT is a monotonic transform so pointless?
 
     DO j = 1, 4
       IF (distance < min_distances(j)) THEN
@@ -633,7 +620,6 @@ END SUBROUTINE GetClosestStellarModels
 !****************************
 
   SUBROUTINE CalculateBolometricPhot(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
-    IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
     REAL(DP), INTENT(OUT) :: bolometric_magnitude, bolometric_flux
     INTEGER :: i
@@ -700,7 +686,6 @@ END SUBROUTINE GetClosestStellarModels
 
 
 REAL(DP) FUNCTION CalculateSynthetic(temperature, gravity, metallicity, ierr, wavelengths, fluxes, filter_wavelengths, filter_trans, filter_filepath, vega_filepath, filter_name, make_sed)
-    IMPLICIT NONE
 
     ! Input arguments
     REAL(DP), INTENT(IN) :: temperature, gravity, metallicity
@@ -811,7 +796,6 @@ END FUNCTION CalculateSynthetic
 !****************************
 
   SUBROUTINE ConvolveSED(wavelengths, fluxes, filter_wavelengths, filter_trans, convolved_flux)
-    IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: wavelengths, fluxes
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
     REAL(DP), DIMENSION(:), ALLOCATABLE :: convolved_flux
@@ -840,7 +824,6 @@ END FUNCTION CalculateSynthetic
 !Calculate Synthetic Flux and Magnitude
 !****************************
   SUBROUTINE CalculateSyntheticFlux(wavelengths, fluxes, synthetic_flux, filter_wavelengths, filter_trans)
-    IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: wavelengths, fluxes
     REAL(DP), DIMENSION(:), INTENT(INOUT) :: filter_wavelengths, filter_trans
     REAL(DP), INTENT(OUT) :: synthetic_flux
@@ -875,14 +858,13 @@ END FUNCTION CalculateSynthetic
 
 
   REAL(DP) FUNCTION FluxToMagnitude(flux)
-    IMPLICIT NONE
     REAL(DP), INTENT(IN) :: flux
     !print *, 'flux:', flux
     IF (flux <= 0.0) THEN
       PRINT *, "Error: Flux must be positive to calculate magnitude."
       FluxToMagnitude = 99.0  ! Return an error value
     ELSE
-      FluxToMagnitude = -2.5 * LOG10(flux) 
+      FluxToMagnitude = -2.5 * LOG10(flux)
     END IF
   END FUNCTION FluxToMagnitude
 
@@ -892,7 +874,6 @@ END FUNCTION CalculateSynthetic
 
 
 FUNCTION CalculateVegaFlux(vega_filepath, filt_wave, filt_trans, filter_name, make_sed) RESULT(vega_flux)
-  IMPLICIT NONE
   CHARACTER(LEN=*), INTENT(IN) :: vega_filepath, filter_name
   CHARACTER(len = 100) :: output_csv
   REAL(DP), DIMENSION(:), INTENT(INOUT) :: filt_wave, filt_trans
@@ -987,7 +968,6 @@ END FUNCTION CalculateVegaFlux
 
 
 SUBROUTINE LoadVegaSED(filepath, wavelengths, flux)
-  IMPLICIT NONE
   CHARACTER(LEN=*), INTENT(IN) :: filepath
   REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
   CHARACTER(LEN=512) :: line
@@ -1021,7 +1001,7 @@ SUBROUTINE LoadVegaSED(filepath, wavelengths, flux)
 
   ALLOCATE(wavelengths(n_rows))
   ALLOCATE(flux(n_rows))
-  
+
   i = 0
   DO
     READ(unit, *, IOSTAT=status) temp_wave, temp_flux  ! Ignore any extra columns.
@@ -1034,82 +1014,12 @@ SUBROUTINE LoadVegaSED(filepath, wavelengths, flux)
   CLOSE(unit)
 END SUBROUTINE LoadVegaSED
 
-                          
+
 
 
 !###########################################################
 !## FILE IO
 !###########################################################
-
-!****************************
-!Load SED File
-!****************************
-
-  SUBROUTINE LoadSED(directory, index, wavelengths, flux)
-    IMPLICIT NONE
-    CHARACTER(LEN=*), INTENT(IN) :: directory
-    INTEGER, INTENT(IN) :: index
-    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
-
-    CHARACTER(LEN=512) :: line
-    INTEGER :: unit, n_rows, status, i
-    REAL :: temp_wavelength, temp_flux
-
-    ! Open the file
-    unit = 20
-    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
-    IF (status /= 0) THEN
-      PRINT *, "Error: Could not open file ", TRIM(directory)
-      STOP
-    END IF
-
-    ! Skip header lines
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) THEN
-        PRINT *, "Error: Could not read the file", TRIM(directory)
-        STOP
-      END IF
-      IF (line(1:1) /= "#") EXIT
-    END DO
-
-    ! Count rows in the file
-    n_rows = 0
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) EXIT
-      n_rows = n_rows + 1
-    END DO
-
-    ! Allocate arrays
-    ALLOCATE(wavelengths(n_rows))
-    ALLOCATE(flux(n_rows))
-
-    ! Rewind to the first non-comment line
-    REWIND(unit)
-    DO
-      READ(unit, '(A)', IOSTAT=status) line
-      IF (status /= 0) THEN
-        PRINT *, "Error: Could not rewind file", TRIM(directory)
-        STOP
-      END IF
-      IF (line(1:1) /= "#") EXIT
-    END DO
-
-    ! Read and parse data
-    i = 0
-    DO
-      READ(unit, *, IOSTAT=status) temp_wavelength, temp_flux
-      IF (status /= 0) EXIT
-      i = i + 1
-      ! Convert f_lambda to f_nu
-      wavelengths(i) = temp_wavelength
-      flux(i) = temp_flux
-    END DO
-
-    CLOSE(unit)
-  END SUBROUTINE LoadSED
-
 
 
 !****************************
@@ -1117,7 +1027,6 @@ END SUBROUTINE LoadVegaSED
 !****************************
 
   SUBROUTINE LoadFilter(directory, filter_wavelengths, filter_trans)
-    IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: directory
     REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: filter_wavelengths, filter_trans
 
@@ -1169,7 +1078,7 @@ END SUBROUTINE LoadVegaSED
       READ(unit, *, IOSTAT=status) temp_wavelength, temp_trans
       IF (status /= 0) EXIT
       i = i + 1
-      
+
       filter_wavelengths(i) = temp_wavelength
       filter_trans(i) = temp_trans
     END DO
@@ -1184,7 +1093,6 @@ END SUBROUTINE LoadVegaSED
 
 
   SUBROUTINE LoadLookupTable(lookup_file, lookup_table, out_file_names, out_logg, out_meta, out_teff)
-    IMPLICIT NONE
     CHARACTER(LEN=*), INTENT(IN) :: lookup_file
     REAL, DIMENSION(:,:), ALLOCATABLE, INTENT(OUT) :: lookup_table
     CHARACTER(LEN=100), ALLOCATABLE, INTENT(INOUT) :: out_file_names(:)
@@ -1220,7 +1128,7 @@ END SUBROUTINE LoadVegaSED
     meta_col = GetColumnIndex(headers, "meta")
     IF (meta_col < 0) THEN
       meta_col = GetColumnIndex(headers, "feh")
-    END IF 
+    END IF
 
     n_rows = 0
     DO
@@ -1349,7 +1257,7 @@ END SUBROUTINE LoadVegaSED
     END SUBROUTINE AppendToken
 
   END SUBROUTINE LoadLookupTable
-  
+
 
 
 
@@ -1364,7 +1272,6 @@ END SUBROUTINE LoadVegaSED
 !****************************
 
   SUBROUTINE TrapezoidalIntegration(x, y, result)
-    IMPLICIT NONE
     REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
     REAL(DP), INTENT(OUT) :: result
 
@@ -1395,7 +1302,6 @@ END SUBROUTINE LoadVegaSED
 
 
 SUBROUTINE SimpsonIntegration(x, y, result)
-  IMPLICIT NONE
   INTEGER, PARAMETER :: DP = KIND(1.0D0)
   REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
   REAL(DP), INTENT(OUT) :: result
@@ -1438,54 +1344,7 @@ SUBROUTINE SimpsonIntegration(x, y, result)
   result = sum
 END SUBROUTINE SimpsonIntegration
 
-SUBROUTINE BooleIntegration(x, y, result)
-  IMPLICIT NONE
-  INTEGER, PARAMETER :: DP = KIND(1.0D0)
-  REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
-  REAL(DP), INTENT(OUT) :: result
-
-  INTEGER :: i, n
-  REAL(DP) :: sum, h, f0, f1, f2, f3, f4
-
-  n = SIZE(x)
-  sum = 0.0_DP
-
-  ! Validate input sizes
-  IF (SIZE(x) /= SIZE(y)) THEN
-    PRINT *, "Error: x and y arrays must have the same size."
-    STOP
-  END IF
-
-  IF (SIZE(x) < 5) THEN
-    PRINT *, "Error: x and y arrays must have at least 5 elements."
-    STOP
-  END IF
-
-  ! Apply Boole's rule
-  DO i = 1, n - 4, 4
-    h = (x(i+4) - x(i)) / 4.0_DP   ! Step size
-
-    f0 = y(i)
-    f1 = y(i+1)
-    f2 = y(i+2)
-    f3 = y(i+3)
-    f4 = y(i+4)
-
-    ! Boole's Rule: (2h/45) * (7f0 + 32f1 + 12f2 + 32f3 + 7f4)
-    sum = sum + (2.0_DP * h / 45.0_DP) * (7.0_DP * f0 + 32.0_DP * f1 + 12.0_DP * f2 + 32.0_DP * f3 + 7.0_DP * f4)
-  END DO
-
-  ! Handle leftover intervals
-  IF (MOD(n, 4) /= 1) THEN
-    PRINT *, "Warning: Remaining points not fitting Boole's rule. Applying Simpson's rule for last interval."
-    sum = sum + (x(n) - x(n-1)) / 6.0_DP * (y(n-1) + 4.0_DP * y(n-1) + y(n))
-  END IF
-
-  result = sum
-END SUBROUTINE BooleIntegration
-
 SUBROUTINE RombergIntegration(x, y, result)
-  IMPLICIT NONE
   INTEGER, PARAMETER :: DP = KIND(1.0D0)
   REAL(DP), DIMENSION(:), INTENT(IN) :: x, y
   REAL(DP), INTENT(OUT) :: result
@@ -1540,8 +1399,8 @@ END SUBROUTINE RombergIntegration
 !Linear Interpolation For SED Construction
 !****************************
 
-  SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
-    IMPLICIT NONE
+!will be removed in the future so long as binary search proves consistently faster
+  SUBROUTINE LinearInterpolate_linearsearch(x, y, x_val, y_val)
     REAL(DP), INTENT(IN) :: x(:), y(:), x_val
     REAL(DP), INTENT(OUT) :: y_val
     INTEGER :: i
@@ -1579,7 +1438,53 @@ END SUBROUTINE RombergIntegration
     END DO
 
     y_val = 0.0_DP
-  END SUBROUTINE LinearInterpolate
+  END SUBROUTINE LinearInterpolate_linearsearch
+
+
+SUBROUTINE LinearInterpolate(x, y, x_val, y_val)
+  REAL(DP), INTENT(IN) :: x(:), y(:), x_val
+  REAL(DP), INTENT(OUT) :: y_val
+  INTEGER :: low, high, mid
+
+  ! Validate input sizes
+  IF (SIZE(x) < 2) THEN
+    PRINT *, "Error: x array has fewer than 2 points."
+    y_val = 0.0_DP
+    RETURN
+  END IF
+
+  IF (SIZE(x) /= SIZE(y)) THEN
+    PRINT *, "Error: x and y arrays have different sizes."
+    y_val = 0.0_DP
+    RETURN
+  END IF
+
+  ! Handle out-of-bounds cases
+  IF (x_val <= x(1)) THEN
+    y_val = y(1)
+    RETURN
+  ELSE IF (x_val >= x(SIZE(x))) THEN
+    y_val = y(SIZE(y))
+    RETURN
+  END IF
+
+  ! Binary search to find the proper interval [x(low), x(low+1)]
+  low = 1
+  high = SIZE(x)
+  DO WHILE (high - low > 1)
+    mid = (low + high) / 2
+    IF (x(mid) <= x_val) THEN
+      low = mid
+    ELSE
+      high = mid
+    END IF
+  END DO
+
+  ! Linear interpolation between x(low) and x(low+1)
+  y_val = y(low) + (y(low+1) - y(low)) / (x(low+1) - x(low)) * (x_val - x(low))
+END SUBROUTINE LinearInterpolate
+
+
 
 
 !****************************
@@ -1587,7 +1492,6 @@ END SUBROUTINE RombergIntegration
 !****************************
 
   SUBROUTINE InterpolateArray(x_in, y_in, x_out, y_out)
-    IMPLICIT NONE
     REAL(DP), INTENT(IN) :: x_in(:), y_in(:), x_out(:)
     REAL(DP), INTENT(OUT) :: y_out(:)
     INTEGER :: i
@@ -1617,184 +1521,322 @@ END SUBROUTINE RombergIntegration
 
 
 
-!****************************
-!SED Interpolation attemps
-!****************************
-
-
-SUBROUTINE ConstructSED_Interpolated(teff, log_g, metallicity, R, d,   &
-     &         file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir,  &
-     &         wavelengths, fluxes)
+FUNCTION det3(M) RESULT(d)
   IMPLICIT NONE
-  ! Inputs:
+  REAL(8), INTENT(IN) :: M(3,3)
+  REAL(8) :: d
+  d = M(1,1)*(M(2,2)*M(3,3) - M(2,3)*M(3,2)) - &
+      M(1,2)*(M(2,1)*M(3,3) - M(2,3)*M(3,1)) + &
+      M(1,3)*(M(2,1)*M(3,2) - M(2,2)*M(3,1))
+END FUNCTION det3
+
+SUBROUTINE ComputeBarycentrics(P, P0, P1, P2, P3, bary)
+  IMPLICIT NONE
+  REAL(8), INTENT(IN) :: P(3), P0(3), P1(3), P2(3), P3(3)
+  REAL(8), INTENT(OUT) :: bary(4)
+  REAL(8) :: M(3,3), d, d0, d1, d2, d3
+  REAL(8) :: rhs(3)
+
+  ! Build matrix M with columns = P1-P0, P2-P0, P3-P0
+  M(:,1) = P1 - P0
+  M(:,2) = P2 - P0
+  M(:,3) = P3 - P0
+
+  d = det3(M)
+  IF (ABS(d) < 1.0D-12) THEN
+    bary = -1.0D0  ! signal degenerate
+    RETURN
+  END IF
+
+  ! Solve M * [u, v, w]^T = P - P0 using Cramer's rule
+  rhs = P - P0
+  d0 = det3(reshape([rhs(1), M(1,2), M(1,3), &
+                      rhs(2), M(2,2), M(2,3), &
+                      rhs(3), M(3,2), M(3,3)], [3,3]))
+  d1 = det3(reshape([M(1,1), rhs(1), M(1,3), &
+                      M(2,1), rhs(2), M(2,3), &
+                      M(3,1), rhs(3), M(3,3)], [3,3]))
+  d2 = det3(reshape([M(1,1), M(1,2), rhs(1), &
+                      M(2,1), M(2,2), rhs(2), &
+                      M(3,1), M(3,2), rhs(3)], [3,3]))
+  ! The barycentrics: w0 = 1 - u - v - w, w1 = u, w2 = v, w3 = w.
+  bary(2) = d0/d
+  bary(3) = d1/d
+  bary(4) = d2/d
+  bary(1) = 1.0D0 - bary(2) - bary(3) - bary(4)
+END SUBROUTINE ComputeBarycentrics
+
+
+SUBROUTINE FindEnclosingSimplex(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, &
+                                  simplex_indices, bary_weights)
+  IMPLICIT NONE
+  INTEGER, PARAMETER :: DP = KIND(1.0D0)
+  REAL(8), INTENT(IN) :: teff, log_g, metallicity
+  REAL(8), INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
+  INTEGER, ALLOCATABLE, INTENT(OUT) :: simplex_indices(:)
+  REAL(DP), ALLOCATABLE, INTENT(OUT) :: bary_weights(:)
+  INTEGER :: i, num_points, j, temp_index, k
+  REAL(8), ALLOCATABLE :: dists(:)
+  REAL(8), DIMENSION(3) :: P, P0, P1, P2, P3
+  REAL(8), DIMENSION(4) :: bary
+  REAL(8) :: tol
+  REAL(8) :: sumw, temp_w(4)
+
+  tol = 1.0D3
+  num_points = SIZE(lu_teff)
+  ALLOCATE(dists(num_points))
+  
+  ! Compute distances for each point
+  DO i = 1, num_points
+    dists(i) = SQRT((lu_teff(i)-teff)**2 + (lu_logg(i)-log_g)**2 + (lu_meta(i)-metallicity)**2)
+  END DO
+  
+  !print *, dists
+  !stop
+
+  ! Find indices of the 4 smallest distances (simple selection sort for 4 elements)
+  ALLOCATE(simplex_indices(4))
+  DO i = 1, 4
+    simplex_indices(i) = i
+  END DO
+  DO i = 5, num_points
+    IF (dists(i) < dists(simplex_indices(4))) THEN
+      simplex_indices(4) = i
+      ! Re-sort the 4 indices by distance (simple bubble sort)
+      DO j = 1, 3
+         IF (dists(simplex_indices(j)) > dists(simplex_indices(j+1))) THEN
+            temp_index = simplex_indices(j)
+            simplex_indices(j) = simplex_indices(j+1)
+            simplex_indices(j+1) = temp_index
+         END IF
+      END DO
+    END IF
+  END DO
+
+  ! Now we have 4 candidate vertices. Form their coordinates.
+  P(1) = teff;    P(2) = log_g;    P(3) = metallicity
+  P0 = [ lu_teff(simplex_indices(1)), lu_logg(simplex_indices(1)), lu_meta(simplex_indices(1)) ]
+  P1 = [ lu_teff(simplex_indices(2)), lu_logg(simplex_indices(2)), lu_meta(simplex_indices(2)) ]
+  P2 = [ lu_teff(simplex_indices(3)), lu_logg(simplex_indices(3)), lu_meta(simplex_indices(3)) ]
+  P3 = [ lu_teff(simplex_indices(4)), lu_logg(simplex_indices(4)), lu_meta(simplex_indices(4)) ]
+  
+CALL ComputeBarycentrics(P, P0, P1, P2, P3, bary)
+IF ( ANY(bary < -tol) ) THEN
+  PRINT *, "Warning: Degenerate tetrahedron. Using inverse-distance weighting fallback."
+  ALLOCATE(bary_weights(4))
+  sumw = 0.0D0
+  DO k = 1, 4
+    temp_w(k) = 1.0D0 / (dists(simplex_indices(k)) + 1.0D-12)
+    sumw = sumw + temp_w(k)
+  END DO
+  bary_weights = temp_w / sumw
+  RETURN
+ELSE
+  ALLOCATE(bary_weights(4))
+  bary_weights = bary
+  RETURN
+END IF
+END SUBROUTINE FindEnclosingSimplex
+
+
+
+
+
+!--------------------------------------------------------------------
+! A robust SED interpolation using scattered data interpolation.
+! Ideally, this uses Delaunay triangulation with barycentric interpolation.
+! The subroutine FindEnclosingSimplex is the heart of the method.
+!--------------------------------------------------------------------
+SUBROUTINE ConstructSED_Robust(teff, log_g, metallicity, R, d,  &
+         file_names, lu_teff, lu_logg, lu_meta, stellar_model_dir,  &
+         wavelengths, fluxes)
+  IMPLICIT NONE
+  INTEGER, PARAMETER :: DP = KIND(1.0D0)
+  ! Inputs
   REAL(8), INTENT(IN) :: teff, log_g, metallicity, R, d
   REAL(8), INTENT(IN) :: lu_teff(:), lu_logg(:), lu_meta(:)
   CHARACTER(LEN=*), INTENT(IN) :: stellar_model_dir
   CHARACTER(LEN=100), INTENT(IN) :: file_names(:)
-  ! Outputs:
+  ! Outputs
   REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, fluxes
 
   ! Local variables
-  INTEGER :: i0, i1, j0, j1, k0, k1
-  INTEGER :: n_points, i
-  REAL(DP) :: f_teff, f_logg, f_meta
+  INTEGER, ALLOCATABLE, DIMENSION(:) :: simplex_indices
+  REAL(DP), ALLOCATABLE, DIMENSION(:) :: bary_weights
+  INTEGER :: num_vertices, n_points, i
   REAL(DP), DIMENSION(:), ALLOCATABLE :: common_wavelengths
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: interp_surface_flux
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: diluted_flux
-  ! sed_grid(2,2,2, :) will hold the SED flux arrays (for each wavelength) for the 8 grid corners
-  REAL(DP), ALLOCATABLE, DIMENSION(:,:,:,:) :: sed_grid
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: interp_flux, temp_wavelength, temp_flux
 
   !--------------------------------------------------------------------
-  ! Find the bounding indices in each parameter dimension.
-  ! These routines should find i0 and i1 such that:
-  !    lu_teff(i0) <= teff <= lu_teff(i1)
-  ! Similarly for log_g and metallicity.
-  ! (You will need to implement these or adapt your existing routines.)
-  CALL FindBoundingIndices(teff, lu_teff, i0, i1)
-  CALL FindBoundingIndices(log_g, lu_logg, j0, j1)
-  CALL FindBoundingIndices(metallicity, lu_meta, k0, k1)
-  !--------------------------------------------------------------------
+  ! Step 1: Find the simplex that encloses (teff, log_g, metallicity)
+  CALL FindEnclosingSimplex(teff, log_g, metallicity, lu_teff, lu_logg, lu_meta, &
+                            simplex_indices, bary_weights)
+  num_vertices = SIZE(simplex_indices)
+  PRINT *, "Enclosing simplex indices: ", simplex_indices
+  PRINT *, "Barycentric weights: ", bary_weights
 
   !--------------------------------------------------------------------
-  ! Load the eight SEDs corresponding to the grid points:
-  ! (i0,j0,k0), (i1,j0,k0), (i0,j1,k0), (i1,j1,k0),
-  ! (i0,j0,k1), (i1,j0,k1), (i0,j1,k1), (i1,j1,k1)
-  ! We assume that file_names is ordered such that the index in lu_teff, etc., matches the SED filename.
-  ! (You may need to adapt this if your file naming is more complicated.)
-  ! First, load one SED (say, for (i0,j0,k0)) to define the common wavelength grid.
-  CALL LoadSED(TRIM(stellar_model_dir)//TRIM(file_names(i0)), i0, temp_wavelengths, temp_flux)
-  n_points = SIZE(temp_wavelengths)
+  ! Step 2: Define a common wavelength grid.
+  ! If we have only one vertex (nearest neighbor fallback), just use that SED.
+  CALL LoadSED(TRIM(stellar_model_dir)//TRIM(file_names(simplex_indices(1))), &
+               simplex_indices(1), temp_wavelength, temp_flux)
+  n_points = SIZE(temp_wavelength)
+  IF (n_points <= 0) THEN
+    PRINT *, "Error: Loaded SED from ", TRIM(file_names(simplex_indices(1))), " has no wavelengths."
+    STOP
+  END IF
   ALLOCATE(common_wavelengths(n_points))
-  common_wavelengths = temp_wavelengths
-  ! Allocate sed_grid: dimensions 2 x 2 x 2 x n_points
-  ALLOCATE(sed_grid(2,2,2, n_points))
-
-  ! Now load each of the eight SEDs and interpolate to the common grid.
-  ! For brevity, we assume a helper subroutine "LoadAndInterpolateSED" that loads an SED
-  ! from a given file (using LoadSED) and then interpolates it onto common_wavelengths (using InterpolateArray).
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(i0)), i0, common_wavelengths, sed_grid(1,1,1,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(i1)), i1, common_wavelengths, sed_grid(2,1,1,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(j0)), j0, common_wavelengths, sed_grid(1,2,1,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(j1)), j1, common_wavelengths, sed_grid(2,2,1,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(k0)), k0, common_wavelengths, sed_grid(1,1,2,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(k1)), k1, common_wavelengths, sed_grid(2,1,2,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(k0+1)), k0+1, common_wavelengths, sed_grid(1,2,2,:))
-  CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(k1+1)), k1+1, common_wavelengths, sed_grid(2,2,2,:))
-  !--------------------------------------------------------------------
-  ! Note: The mapping of indices in file_names to (teff, logg, meta) grid coordinates
-  ! must be arranged consistently in your system.
-  !--------------------------------------------------------------------
+  common_wavelengths = temp_wavelength
+  DEALLOCATE(temp_wavelength, temp_flux)
 
   !--------------------------------------------------------------------
-  ! Compute fractional distances along each parameter axis:
-  f_teff = (teff - lu_teff(i0)) / (lu_teff(i1) - lu_teff(i0))
-  f_logg = (log_g - lu_logg(j0)) / (lu_logg(j1) - lu_logg(j0))
-  f_meta = (metallicity - lu_meta(k0)) / (lu_meta(k1) - lu_meta(k0))
-  !--------------------------------------------------------------------
+  ! Step 3: Compute the SED.
+  ALLOCATE(interp_flux(n_points))
+  interp_flux = 0.0D0
+  IF (num_vertices == 1) THEN
+    ! Nearest neighbor: just load the SED without interpolation.
+    CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(simplex_indices(1))), simplex_indices(1), common_wavelengths, interp_flux)
+  ELSE
+    DO i = 1, num_vertices
+      !print *, TRIM(stellar_model_dir)//TRIM(file_names(simplex_indices(i))), simplex_indices(i), common_wavelengths, temp_flux
+      CALL LoadAndInterpolateSED(TRIM(stellar_model_dir)//TRIM(file_names(simplex_indices(i))), simplex_indices(i), common_wavelengths, temp_flux)
+      ! Check that temp_flux has the expected size:
+      IF (SIZE(temp_flux) /= n_points) THEN
+         PRINT *, "Error: SED from ", TRIM(file_names(simplex_indices(i))), " has mismatched wavelength grid."
+         STOP
+      END IF
+      interp_flux = interp_flux + bary_weights(i) * temp_flux
+      DEALLOCATE(temp_flux)
+    END DO
+  END IF
 
   !--------------------------------------------------------------------
-  ! Perform trilinear interpolation at each wavelength point.
-  ALLOCATE(interp_surface_flux(n_points))
-  DO i = 1, n_points
-    interp_surface_flux(i) = &
-         (1.0D0 - f_teff)*(1.0D0 - f_logg)*(1.0D0 - f_meta)*sed_grid(1,1,1,i) + &
-         f_teff*(1.0D0 - f_logg)*(1.0D0 - f_meta)*sed_grid(2,1,1,i) + &
-         (1.0D0 - f_teff)*f_logg*(1.0D0 - f_meta)*sed_grid(1,2,1,i) + &
-         f_teff*f_logg*(1.0D0 - f_meta)*sed_grid(2,2,1,i) + &
-         (1.0D0 - f_teff)*(1.0D0 - f_logg)*f_meta*sed_grid(1,1,2,i) + &
-         f_teff*(1.0D0 - f_logg)*f_meta*sed_grid(2,1,2,i) + &
-         (1.0D0 - f_teff)*f_logg*f_meta*sed_grid(1,2,2,i) + &
-         f_teff*f_logg*f_meta*sed_grid(2,2,2,i)
-  END DO
-  !--------------------------------------------------------------------
-
-  !--------------------------------------------------------------------
-  ! Apply the dilution factor to convert the interpolated surface flux density
-  ! into an observed flux density at Earth.
-  ALLOCATE(diluted_flux(n_points))
-  CALL dilute_flux(interp_surface_flux, R, d, diluted_flux)
-  !--------------------------------------------------------------------
-
-  ! Set the output arrays.
-  ALLOCATE(wavelengths(n_points), fluxes(n_points))
+  ! Step 4: Apply the dilution factor (R/d)^2.
+  ALLOCATE(fluxes(n_points))
+  CALL dilute_flux(interp_flux, R, d, fluxes)
+  ALLOCATE(wavelengths(n_points))
   wavelengths = common_wavelengths
-  fluxes = diluted_flux
 
-  ! Deallocate temporary arrays.
-  DEALLOCATE(common_wavelengths, interp_surface_flux, diluted_flux)
-  ! (Also deallocate sed_grid when done, if appropriate.)
+  ! Clean up
+  DEALLOCATE(common_wavelengths, interp_flux)
   
-END SUBROUTINE ConstructSED_Interpolated
+END SUBROUTINE ConstructSED_Robust
 
-
-SUBROUTINE FindBoundingIndices(target, grid, i0, i1)
-  IMPLICIT NONE
-  INTEGER, PARAMETER :: DP = KIND(1.0D0)
-  REAL(8), INTENT(IN) :: target
-  REAL(8), INTENT(IN) :: grid(:)
-  INTEGER, INTENT(OUT) :: i0, i1
-  INTEGER :: i, n
-
-  n = SIZE(grid)
-
-  ! If target is below the grid, return first two indices.
-  IF (target <= grid(1)) THEN
-    i0 = 1
-    i1 = 2
-    RETURN
-  END IF
-
-  ! If target is above the grid, return the last two indices.
-  IF (target >= grid(n)) THEN
-    i0 = n - 1
-    i1 = n
-    RETURN
-  END IF
-
-  ! Otherwise, find the indices such that grid(i0) <= target <= grid(i1)
-  DO i = 1, n - 1
-    IF (grid(i) <= target .AND. target <= grid(i+1)) THEN
-      i0 = i
-      i1 = i + 1
-      RETURN
-    END IF
-  END DO
-END SUBROUTINE FindBoundingIndices
 
 
 
 SUBROUTINE LoadAndInterpolateSED(filename, index, common_wavelengths, flux_out)
-  IMPLICIT NONE
   INTEGER, PARAMETER :: DP = KIND(1.0D0)
   CHARACTER(LEN=*), INTENT(IN) :: filename
   INTEGER, INTENT(IN) :: index
   REAL(DP), INTENT(IN) :: common_wavelengths(:)
-  REAL(DP), INTENT(OUT) :: flux_out(:)
-  
-  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux
+  REAL(DP), ALLOCATABLE, INTENT(OUT) :: flux_out(:)
 
-  ! Use your existing LoadSED subroutine to load the SED from the file.
+  REAL(DP), DIMENSION(:), ALLOCATABLE :: temp_wavelengths, temp_flux
+  INTEGER :: n, i, n_print
+
+  ! Load the SED from the file.
   CALL LoadSED(TRIM(filename), index, temp_wavelengths, temp_flux)
   
-  ! Use your existing InterpolateArray to re-grid the loaded SED onto common_wavelengths.
+  ! Check that the loaded data arrays have at least 2 points.
+  IF (SIZE(temp_wavelengths) < 2 .OR. SIZE(temp_flux) < 2) THEN
+    PRINT *, "Error: Loaded SED arrays are too small."
+    STOP
+  END IF
+
+  ! Allocate flux_out to match the size of the common wavelength grid.
+  n = SIZE(common_wavelengths)
+  ALLOCATE(flux_out(n))
+  
+  ! Interpolate the loaded SED onto the common wavelength grid.
   CALL InterpolateArray(temp_wavelengths, temp_flux, common_wavelengths, flux_out)
   
+  ! Print the first five common wavelengths.
+  n_print = MIN(5, SIZE(common_wavelengths))
+  PRINT *, "First ", n_print, " common wavelengths:"
+  DO i = 1, n_print
+    PRINT *, common_wavelengths(i)
+  END DO
+  
+  ! Print the first five interpolated flux values.
+  n_print = MIN(5, SIZE(flux_out))
+  PRINT *, "First ", n_print, " interpolated flux values:"
+  DO i = 1, n_print
+    PRINT *, flux_out(i)
+  END DO
+
   ! Clean up temporary arrays.
   DEALLOCATE(temp_wavelengths, temp_flux)
 END SUBROUTINE LoadAndInterpolateSED
 
+!****************************
+!Load SED File
+!****************************
 
+  SUBROUTINE LoadSED(directory, index, wavelengths, flux)
+    CHARACTER(LEN=*), INTENT(IN) :: directory
+    INTEGER, INTENT(IN) :: index
+    REAL(DP), DIMENSION(:), ALLOCATABLE, INTENT(OUT) :: wavelengths, flux
 
+    CHARACTER(LEN=512) :: line
+    INTEGER :: unit, n_rows, status, i
+    REAL(DP) :: temp_wavelength, temp_flux
 
+    ! Open the file
+    unit = 20
+    OPEN(unit, FILE=TRIM(directory), STATUS='OLD', ACTION='READ', IOSTAT=status)
+    IF (status /= 0) THEN
+      PRINT *, "Error: Could not open file ", TRIM(directory)
+      STOP
+    END IF
 
+    ! Skip header lines
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not read the file", TRIM(directory)
+        STOP
+      END IF
+      IF (line(1:1) /= "#") EXIT
+    END DO
 
+    ! Count rows in the file
+    n_rows = 0
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) EXIT
+      n_rows = n_rows + 1
+    END DO
 
+    ! Allocate arrays
+    ALLOCATE(wavelengths(n_rows))
+    ALLOCATE(flux(n_rows))
 
+    ! Rewind to the first non-comment line
+    REWIND(unit)
+    DO
+      READ(unit, '(A)', IOSTAT=status) line
+      IF (status /= 0) THEN
+        PRINT *, "Error: Could not rewind file", TRIM(directory)
+        STOP
+      END IF
+      IF (line(1:1) /= "#") EXIT
+    END DO
 
+    ! Read and parse data
+    i = 0
+    DO
+      READ(unit, *, IOSTAT=status) temp_wavelength, temp_flux
+      IF (status /= 0) EXIT
+      i = i + 1
+      ! Convert f_lambda to f_nu
+      wavelengths(i) = temp_wavelength
+      flux(i) = temp_flux
+    END DO
 
+    CLOSE(unit)
 
-
+  END SUBROUTINE LoadSED
 
 
 
