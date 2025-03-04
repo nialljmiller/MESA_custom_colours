@@ -406,8 +406,8 @@ module run_star_extras
     !print *,  'meta', lu_meta
     !print *, 'teff', lu_teff
     ! Interpolate Spectral Energy Distribution
-    CALL ConstructSED_Robust(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
-    !CALL ConstructSED(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+    !CALL ConstructSED_Robust(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
+    CALL ConstructSED(teff, log_g, metallicity, R, d, file_names, lu_teff, lu_logg, lu_meta, sed_filepath, wavelengths, fluxes)
 
     ! Calculate bolometric flux and magnitude
     CALL CalculateBolometricPhot(wavelengths, fluxes, bolometric_magnitude, bolometric_flux)
